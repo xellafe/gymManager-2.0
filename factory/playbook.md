@@ -6,6 +6,8 @@
 - Tipi condivisi main/renderer in `src/types/shared.ts`; tipizzazione di `window.api` in `src/renderer/src/types/api.d.ts`.
 - TypeScript strict, niente `any` senza motivazione esplicita.
 - Test unit in `tests/unit/` (dominio in `tests/unit/domain/`), e2e Playwright su Electron in `tests/e2e/`.
+- Ogni modifica al layout della ricevuta va verificata sul caso peggiore (tutore + logo + 5 voci) contando le pagine del PDF generato — il layout di `generaCSS` era al limite (1013 px su ≈1046) e il tutore lo faceva sforare senza che nessun test se ne accorgesse.
+- Le asserzioni sul CSS della ricevuta devono coprire ogni valore elencato nella tabella dello spec, non un campione — altrimenti una regressione su regole non campionate (h2, note, separatore) passa inosservata.
 
 ## Patterns
 - Nuova operazione esposta al renderer: handler `ipcMain.handle('<area>:<azione>')` in `src/main/ipc/handlers.ts` → metodo in `src/preload/index.ts` → tipo in `src/renderer/src/types/api.d.ts` (es. `clienti:count`).
@@ -22,6 +24,7 @@
 - Non indebolire la sicurezza Electron: `contextIsolation: true`, `nodeIntegration: false`, IPC solo via preload.
 - Non inventare requisiti: ciò che non è in `docs/` va in `OPEN-QUESTIONS.md` con un'assunzione marcata.
 - Non toccare `.github/workflows/release.yml` né la versione in `package.json` fuori da una release.
+- Non modificare `LOGO_BOX_WIDTH_PX`/`LOGO_BOX_HEIGHT_PX` per guadagnare spazio nella ricevuta — in `src/main/domain/ricevuta.ts` sono la sorgente unica anche del ridimensionamento del logo; cambiarle altera i loghi già caricati.
 
 ## Definition of Done
 - [gate] Build, lint and tests are green.

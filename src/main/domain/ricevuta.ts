@@ -58,6 +58,10 @@ export interface ImpostazioniAttivitaSnapshot {
  * separate da una linea tratteggiata con testo "--- Tagliare ---".
  *
  * L'HTML è self-contained (CSS inline) e ottimizzato per la stampa A4.
+ *
+ * Layout compatto: le due copie stanno su una A4 fino a ~5 voci (con tutore e logo).
+ * Fallback: se non stanno insieme, ogni `.copia` ha `break-inside: avoid` e quindi
+ * si passa a una copia per pagina (la copia matrice va intera alla pagina successiva).
  */
 export function generaHTMLRicevuta(
   ricevuta: RicevutaConRighe,
@@ -241,7 +245,7 @@ function generaCSS(): string {
 
     body {
       font-family: Arial, Helvetica, sans-serif;
-      font-size: 11pt;
+      font-size: 10pt;
       color: #1a1a1a;
       background: #fff;
       padding: 16px;
@@ -253,23 +257,25 @@ function generaCSS(): string {
       margin: 0 auto;
       padding: 24px;
       border: 1px solid #ccc;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .etichetta-copia {
       text-align: right;
-      font-size: 9pt;
+      font-size: 8pt;
       color: #666;
-      margin-bottom: 12px;
+      margin-bottom: 4px;
       font-style: italic;
     }
 
     .intestazione-attivita {
       display: flex;
       align-items: flex-start;
-      gap: 16px;
-      margin-bottom: 20px;
+      gap: 12px;
+      margin-bottom: 8px;
       border-bottom: 2px solid #333;
-      padding-bottom: 12px;
+      padding-bottom: 6px;
     }
 
     .logo {
@@ -279,33 +285,33 @@ function generaCSS(): string {
     }
 
     .dati-attivita {
-      line-height: 1.5;
+      line-height: 1.3;
     }
 
     .numero-data {
-      margin: 16px 0;
+      margin: 6px 0;
     }
 
     .numero-data h1 {
-      font-size: 14pt;
-      margin-bottom: 4px;
+      font-size: 12pt;
+      margin-bottom: 2px;
     }
 
     .intestatario {
-      margin: 16px 0;
-      padding: 12px;
+      margin: 6px 0;
+      padding: 6px 8px;
       background: #f7f7f7;
       border-left: 3px solid #333;
     }
 
     .intestatario h2 {
-      font-size: 11pt;
-      margin-bottom: 6px;
+      font-size: 10pt;
+      margin-bottom: 2px;
       color: #444;
     }
 
     .intestatario p {
-      line-height: 1.6;
+      line-height: 1.3;
     }
 
     .tutore {
@@ -316,13 +322,13 @@ function generaCSS(): string {
     .voci {
       width: 100%;
       border-collapse: collapse;
-      margin: 16px 0;
+      margin: 6px 0;
     }
 
     .voci th,
     .voci td {
       border: 1px solid #aaa;
-      padding: 6px 8px;
+      padding: 3px 6px;
     }
 
     .voci thead {
@@ -339,26 +345,26 @@ function generaCSS(): string {
     .right { text-align: right; }
 
     .dicitura-pie {
-      margin-top: 16px;
-      font-size: 9pt;
+      margin-top: 6px;
+      font-size: 8pt;
       color: #555;
       border-top: 1px solid #ccc;
-      padding-top: 8px;
+      padding-top: 4px;
     }
 
     .separatore {
       text-align: center;
-      margin: 20px auto;
+      margin: 8px auto;
       max-width: 720px;
       border-top: 2px dashed #999;
-      padding-top: 6px;
-      font-size: 9pt;
+      padding-top: 2px;
+      font-size: 8pt;
       color: #888;
     }
 
     @media print {
       body { padding: 0; }
-      .copia { border: none; padding: 16px; }
+      .copia { border: none; padding: 8px 12px; }
       .separatore { border-color: #444; }
     }
   `
