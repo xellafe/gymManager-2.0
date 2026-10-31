@@ -210,3 +210,44 @@ describe('generaHTMLRicevuta — riga senza periodo', () => {
     expect(html).not.toContain('null')
   })
 })
+
+describe('generaHTMLRicevuta — layout compatto (tutore + logo + 5 voci)', () => {
+  const righe = Array.from({ length: 5 }, (_, i) => ({
+    id: 100 + i,
+    ricevuta_id: 2,
+    tipo: 'abbonamento' as const,
+    riferimento_id: 20 + i,
+    descrizione: `Voce ${i + 1}`,
+    data_inizio: '2025-03-01',
+    data_fine: '2025-05-31',
+    prezzo: 1234.56,
+    ordine: i,
+  }))
+  const ricevuta: RicevutaConRighe = { ...ricevutaConTutore, righe, totale: 6172.8 }
+  const html = generaHTMLRicevuta(ricevuta, {
+    ...impostazioni,
+    logo_base64: 'data:image/png;base64,AAAA',
+  })
+
+  it('usa font e spaziature compatti', () => {
+    expect(html).toMatch(/body \{[^}]*font-size: 10pt;/)
+    expect(html).toMatch(/\.numero-data h1 \{[^}]*font-size: 12pt;/)
+    expect(html).toMatch(/\.dicitura-pie \{[^}]*font-size: 8pt;/)
+    expect(html).toMatch(/\.voci th,\s*\.voci td \{[^}]*padding: 3px 6px;/)
+    expect(html).toMatch(/@media print \{[\s\S]*\.copia \{ border: none; padding: 8px 12px; \}/)
+  })
+
+  it('impedisce di spezzare una copia tra due pagine', () => {
+    expect(html).toMatch(/\.copia \{[^}]*break-inside: avoid;[^}]*page-break-inside: avoid;/)
+  })
+
+  it('mantiene contenuto, importi e date invariati', () => {
+    expect(html).toContain('Ricevuta n. 2025-2')
+    expect(html).toContain('BNCNNA75B45H501C')
+    expect(html).toContain('Tutore di BNCLCU10A01H501B')
+    expect(html).toContain('Voce 5')
+    expect(html.match(/1\.234,56/g)?.length).toBe(10)
+    expect(html.match(/01\/03\/2025 - 31\/05\/2025/g)?.length).toBe(10)
+    expect(html).toContain('Importo comprensivo di IVA.')
+  })
+})
