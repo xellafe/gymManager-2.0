@@ -41,3 +41,9 @@ coverage/
 # Temp
 *.tmp
 *.temp
+
+# devflow factory
+factory/*
+!factory/config.md
+!factory/playbook.md
+!factory/backlog.md
