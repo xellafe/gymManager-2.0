@@ -91,6 +91,7 @@ interface FormState {
   logo_base64: string
   backup_on_close: boolean
   backup_dir: string
+  receipt_download_dir: string
   backup_periodic_enabled: boolean
   backup_periodic_hours: number
   backup_retention: number
@@ -170,6 +171,7 @@ export default function SettingsPage(): React.JSX.Element {
     logo_base64: '',
     backup_on_close: true,
     backup_dir: '',
+    receipt_download_dir: '',
     backup_periodic_enabled: false,
     backup_periodic_hours: 6,
     backup_retention: 10,
@@ -247,6 +249,7 @@ export default function SettingsPage(): React.JSX.Element {
           logo_base64: s.logo_base64 ?? '',
           backup_on_close: s.backup_on_close ?? true,
           backup_dir: s.backup_dir ?? '',
+          receipt_download_dir: s.receipt_download_dir ?? '',
           backup_periodic_enabled: s.backup_periodic_enabled ?? false,
           backup_periodic_hours: s.backup_periodic_hours ?? 6,
           backup_retention: s.backup_retention ?? 10,
@@ -553,6 +556,7 @@ export default function SettingsPage(): React.JSX.Element {
         logo_base64: form.logo_base64,
         backup_on_close: form.backup_on_close,
         backup_dir: form.backup_dir,
+        receipt_download_dir: form.receipt_download_dir,
         backup_periodic_enabled: form.backup_periodic_enabled,
         backup_periodic_hours: form.backup_periodic_hours,
         backup_retention: form.backup_retention,
@@ -591,6 +595,16 @@ export default function SettingsPage(): React.JSX.Element {
     })
     if (!res.canceled && res.filePaths.length > 0) {
       setForm((prev) => ({ ...prev, backup_dir: res.filePaths[0] }))
+    }
+  }
+
+  async function handleSfogliaCartellaRicevute(): Promise<void> {
+    const res = await window.api.dialog.showOpenDialog({
+      title: t('impostazioni.cartella_ricevute_label'),
+      properties: ['openDirectory'],
+    })
+    if (!res.canceled && res.filePaths.length > 0) {
+      setForm((prev) => ({ ...prev, receipt_download_dir: res.filePaths[0] }))
     }
   }
 
@@ -859,6 +873,49 @@ export default function SettingsPage(): React.JSX.Element {
             />
             <p className="mt-1 text-xs text-gray-400 dark:text-gray-500 text-right">
               {form.dicitura_pie.length}/200
+            </p>
+          </div>
+
+          {/* Cartella di salvataggio ricevute */}
+          <div className="mb-5">
+            <label
+              htmlFor="settings-receipt-dir"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+            >
+              {t('impostazioni.cartella_ricevute_label')}
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="settings-receipt-dir"
+                type="text"
+                readOnly
+                value={form.receipt_download_dir}
+                placeholder={t('impostazioni.cartella_ricevute_placeholder')}
+                aria-describedby="settings-receipt-dir-help"
+                className="block flex-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => { void handleSfogliaCartellaRicevute() }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+              >
+                {t('backup.cartella_sfoglia')}
+              </button>
+              {form.receipt_download_dir.trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, receipt_download_dir: '' }))}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+                >
+                  {t('backup.cartella_reset')}
+                </button>
+              )}
+            </div>
+            <p
+              id="settings-receipt-dir-help"
+              className="mt-1.5 text-xs text-gray-500 dark:text-gray-400"
+            >
+              {t('impostazioni.cartella_ricevute_help')}
             </p>
           </div>
 
