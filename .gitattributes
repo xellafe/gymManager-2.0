@@ -1,0 +1,11 @@
+# Fine riga LF per tutti i file di testo, su ogni sistema (allineato a .prettierrc "endOfLine": "lf")
+* text=auto eol=lf
+
+# Binari
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.db binary
