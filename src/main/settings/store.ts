@@ -24,7 +24,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   backup_dir: '',
   backup_periodic_enabled: false,
   backup_periodic_hours: 6,
-  backup_retention: 10
+  backup_retention: 10,
+  receipt_download_dir: '',
+  receipt_last_dir: ''
 }
 
 export function getSettingsPath(): string {
@@ -77,7 +79,9 @@ export function loadSettings(): AppSettings {
       backup_periodic_enabled:
         parsed.backup_periodic_enabled ?? DEFAULT_SETTINGS.backup_periodic_enabled,
       backup_periodic_hours: parsed.backup_periodic_hours ?? DEFAULT_SETTINGS.backup_periodic_hours,
-      backup_retention: parsed.backup_retention ?? DEFAULT_SETTINGS.backup_retention
+      backup_retention: parsed.backup_retention ?? DEFAULT_SETTINGS.backup_retention,
+      receipt_download_dir: parsed.receipt_download_dir ?? DEFAULT_SETTINGS.receipt_download_dir,
+      receipt_last_dir: parsed.receipt_last_dir ?? DEFAULT_SETTINGS.receipt_last_dir
     }
   } catch (err) {
     log.error('[settings] Errore lettura impostazioni, uso defaults:', err)

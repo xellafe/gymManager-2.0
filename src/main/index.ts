@@ -1,10 +1,11 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, session, shell } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log'
 import { closeDatabase, isDatabaseOpen } from './db/database'
 import { registerIpcHandlers } from './ipc/handlers'
 import { loadSettings } from './settings/store'
+import { gestisciDownload } from './settings/cartella-ricevute'
 import { backupAutomatico } from './backup/backup-service'
 import { stopBackupScheduler } from './backup/backup-scheduler'
 import { initAutoUpdater } from './updater/auto-updater'
@@ -40,8 +41,18 @@ function createWindow(): BrowserWindow {
     initSyncService(mainWindow)
   })
 
-  // Apri i link esterni nel browser di sistema invece che in Electron
+  // I blob URL (PDF delle ricevute) esistono solo nel renderer: si aprono in una finestra
+  // dell'app con il visualizzatore PDF integrato. Gli altri link vanno nel browser di sistema.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('blob:')) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          autoHideMenuBar: true,
+          webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
+        }
+      }
+    }
     shell.openExternal(url)
     return { action: 'deny' }
   })
@@ -68,6 +79,9 @@ app.whenReady().then(() => {
 
   // Registra tutti gli handler IPC prima di creare la finestra
   registerIpcHandlers()
+
+  // «Salva con nome» delle ricevute (Scarica e visualizzatore PDF) parte dalla cartella risolta
+  session.defaultSession.on('will-download', (_e, item) => gestisciDownload(item))
 
   createWindow()
 
