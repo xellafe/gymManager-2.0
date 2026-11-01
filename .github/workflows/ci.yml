@@ -36,15 +36,14 @@ jobs:
       - name: Install setuptools (distutils rimosso in Python 3.12, richiesto da node-gyp)
         run: pip install setuptools
 
-      - name: Rebuild native module for Node.js (tests)
-        run: npm rebuild better-sqlite3-multiple-ciphers
-
       - name: Typecheck
         run: npm run typecheck
 
       - name: Lint
         run: npm run lint
 
+      # Lo script `pretest` esegue `npm rebuild better-sqlite3-multiple-ciphers`
+      # (build per l'ABI di Node), vedi D17 in docs/DECISIONS.md.
       - name: Test
         run: npm run test
 

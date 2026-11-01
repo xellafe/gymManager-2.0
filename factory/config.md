@@ -28,8 +28,8 @@ Notes for every agent:
   crea tag né release.
 - Modulo nativo `better-sqlite3-multiple-ciphers`: i test Vitest richiedono il build per l'ABI di
   Node, Electron quello per l'ABI di Electron (vedi i commenti in `.github/workflows/ci.yml`).
-  Se i test falliscono con un errore di `NODE_MODULE_VERSION`, eseguire
-  `npm rebuild better-sqlite3-multiple-ciphers`.
+  Gli script `pretest` e `predev`/`pretest:e2e` ricompilano il modulo per il runtime giusto
+  (D17 in `docs/DECISIONS.md`); non serve un rebuild manuale prima di `npm test`.
 - La conoscenza autorevole è in `docs/` (SPEC, DOMAIN-MODEL, FUNZIONALITA, DECISIONS) e in
   `CLAUDE.md` (invarianti di dominio). Requisiti mancanti → `OPEN-QUESTIONS.md`.
 - Non toccare `out/`, `dist/`, `playwright-report/`, `test-results/` (artefatti generati).

@@ -6,14 +6,17 @@
   "private": true,
   "author": "GymManager",
   "scripts": {
+    "predev": "electron-rebuild -f -w better-sqlite3-multiple-ciphers",
     "dev": "electron-vite dev",
     "build:electron": "electron-vite build",
     "build": "electron-vite build && electron-builder",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.e2e.json",
     "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "pretest": "npm rebuild better-sqlite3-multiple-ciphers",
     "test": "vitest run",
     "test:watch": "vitest",
+    "pretest:e2e": "electron-rebuild -f -w better-sqlite3-multiple-ciphers",
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build:electron",
     "postinstall": "electron-builder install-app-deps"
