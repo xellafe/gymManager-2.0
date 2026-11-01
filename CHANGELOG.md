@@ -2,6 +2,16 @@
 
 Tutte le modifiche rilevanti di GymManager 2.0. Formato ispirato a [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versionamento [SemVer](https://semver.org/lang/it/) (pre-1.0).
 
+## [0.1.13] — 2026-11-02
+
+### Aggiunto
+- **Novità della versione**: al primo accesso dopo un aggiornamento compare una finestra con le modifiche introdotte, comprese quelle delle versioni eventualmente saltate. Si può riaprire da **Impostazioni → Informazioni app → «Novità della versione»**.
+- **Chiave di recupero della master password**: un codice di 24 caratteri, mostrato al primo avvio, da stampare o salvare. Se si dimentica la password, **«Password dimenticata?»** permette di sbloccare l'archivio con la chiave, scegliere una nuova password e ricevere una nuova chiave. Chi usa già l'app viene invitato a generarla allo sblocco; da **Impostazioni → Sicurezza** si può rigenerare in qualsiasi momento. La chiave apre anche i backup creati da questa versione in poi.
+- **PIN di sblocco**: un PIN di 6 lettere o cifre, valido solo su questo PC, da digitare in 6 caselle; l'app si apre appena si inserisce l'ultimo carattere. Dopo 5 errori il PIN si blocca per tempi crescenti e al 10° errore si disattiva; la master password funziona sempre. In **Impostazioni → Sicurezza** si può scegliere di mostrare i caratteri mentre si digita.
+
+### Corretto
+- **Errori tecnici scambiati per password errata**: se il database non si apre per un problema tecnico, l'app mostra «Impossibile decodificare i dati a causa di un errore interno» invece di «Password errata», e non conta il tentativo del PIN.
+
 ## [0.1.12] — 2026-11-01
 
 ### Aggiunto

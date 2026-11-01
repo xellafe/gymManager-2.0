@@ -1,6 +1,6 @@
 {
   "name": "gymmanager-2",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Gestionale desktop per palestre — GymManager 2.0",
   "main": "out/main/index.js",
   "private": true,
