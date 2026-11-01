@@ -78,6 +78,26 @@ describe('loadSettings — cartelle ricevute', () => {
   })
 })
 
+describe('last_seen_version', () => {
+  it('ha default vuoto e legge il valore persistito', () => {
+    expect(loadSettings().last_seen_version).toBe('')
+    writeFileSync(getSettingsPath(), JSON.stringify({ last_seen_version: '0.1.12' }), 'utf-8')
+    expect(loadSettings().last_seen_version).toBe('0.1.12')
+  })
+
+  it('non viene scritta in app_settings', () => {
+    const db = new Database(':memory:')
+    try {
+      runMigrations(db)
+      applyAppSettingsToDb(db, { last_seen_version: '0.1.12', ragione_sociale: 'ASD Test' })
+      const righe = db.prepare(`SELECT key FROM app_settings WHERE key = 'last_seen_version'`).all()
+      expect(righe).toHaveLength(0)
+    } finally {
+      db.close()
+    }
+  })
+})
+
 describe('applyAppSettingsToDb — cartelle ricevute', () => {
   it('non scrive receipt_download_dir né receipt_last_dir in app_settings', () => {
     const db = new Database(':memory:')

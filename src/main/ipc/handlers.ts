@@ -2,6 +2,11 @@ import { ipcMain, app, dialog, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { existsSync, unlinkSync, readFileSync, writeFileSync } from 'fs'
 import { checkForUpdates, installUpdate, revealDownloadedUpdate } from '../updater/auto-updater'
+import {
+  getNovitaDaMostrare,
+  segnaVersioneVista,
+  getNovitaVersioneCorrente
+} from '../changelog/changelog-service'
 import { backupLocale, backupAutomatico, listBackupLocali } from '../backup/backup-service'
 import { initBackupScheduler, restartBackupScheduler } from '../backup/backup-scheduler'
 import { verificaBackup, ripristinaBackup, resetDatabase, eseguiRipristino } from '../backup/restore-service'
@@ -13,7 +18,13 @@ import {
   listBackupDrive,
   ripristinaDaDrive
 } from '../backup/drive-service'
-import type { BackupManifest, BackupLocaleInfo, DriveBackupItem, SyncStatus } from '../../types/shared'
+import type {
+  BackupManifest,
+  BackupLocaleInfo,
+  DriveBackupItem,
+  SyncStatus,
+  VoceChangelog
+} from '../../types/shared'
 import {
   getStatus as syncGetStatus,
   upload as syncUpload,
@@ -1248,6 +1259,35 @@ export function registerIpcHandlers(): void {
       }
     }
   )
+
+  // ── Changelog ────────────────────────────────────────────────────────────
+
+  ipcMain.handle('changelog:getPending', (): VoceChangelog[] => {
+    try {
+      return getNovitaDaMostrare()
+    } catch (err) {
+      log.error('[ipc] changelog:getPending errore:', err)
+      throw err instanceof Error ? err : new Error('Errore nel recupero delle novità')
+    }
+  })
+
+  ipcMain.handle('changelog:markSeen', (): void => {
+    try {
+      segnaVersioneVista()
+    } catch (err) {
+      log.error('[ipc] changelog:markSeen errore:', err)
+      throw err instanceof Error ? err : new Error('Errore nel salvataggio della versione vista')
+    }
+  })
+
+  ipcMain.handle('changelog:getCurrent', (): VoceChangelog[] => {
+    try {
+      return getNovitaVersioneCorrente()
+    } catch (err) {
+      log.error('[ipc] changelog:getCurrent errore:', err)
+      throw err instanceof Error ? err : new Error('Errore nel recupero delle note della versione')
+    }
+  })
 
   // ── Auto-updater ─────────────────────────────────────────────────────────
 

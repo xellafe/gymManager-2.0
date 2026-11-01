@@ -509,6 +509,13 @@
       "vuoto": "No birthdays this week"
     }
   },
+  "changelog": {
+    "titolo": "What's new",
+    "versione": "Version {{versione}}",
+    "versione_data": "Version {{versione}} — {{data}}",
+    "chiudi": "Close",
+    "apri": "What's new in this version"
+  },
   "aggiornamento": {
     "disponibile": "Update {{version}} available. Downloading...",
     "trovato": "Update {{version}} available",

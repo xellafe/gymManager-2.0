@@ -41,7 +41,8 @@ import type {
   DriveBackupItem,
   UpdateInfo,
   UpdateProgress,
-  SyncStatus
+  SyncStatus,
+  VoceChangelog
 } from '../types/shared'
 
 // Espone le API standard di electron-toolkit su window.electron
@@ -339,6 +340,18 @@ const api: ElectronAPI = {
       filters?: { name: string; extensions: string[] }[]
     }): Promise<{ canceled: boolean; filePath: string }> {
       return ipcRenderer.invoke('dialog:showSaveDialog', options)
+    }
+  },
+
+  changelog: {
+    getPending(): Promise<VoceChangelog[]> {
+      return ipcRenderer.invoke('changelog:getPending')
+    },
+    markSeen(): Promise<void> {
+      return ipcRenderer.invoke('changelog:markSeen')
+    },
+    getCurrent(): Promise<VoceChangelog[]> {
+      return ipcRenderer.invoke('changelog:getCurrent')
     }
   },
 
