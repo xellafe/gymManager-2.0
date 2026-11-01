@@ -16,6 +16,8 @@
 - I campi composti da più input (come `PinInput`) hanno un gruppo con `aria-labelledby` e un `aria-label` per ogni casella — `src/renderer/src/components/sicurezza/PinInput.tsx` lo fa già; la regola evita regressioni in nuovi campi.
 - Nei test su DB reale un errore `DB_APERTURA_FALLITA` indica quasi sempre il modulo nativo compilato per Electron: eseguire `npm rebuild better-sqlite3-multiple-ciphers` prima di cercare bug — 31 test fallivano solo per l'ABI.
 - Ogni nuovo codice di errore del main (es. `DB_APERTURA_FALLITA` in `src/main/db/database.ts`) ha un messaggio dedicato nel renderer o una scelta esplicita del messaggio generico — `Unlock.tsx` lo mostrava come errore generico senza indicare cosa fare.
+- Nel renderer i codici di errore IPC si riconoscono con `message.includes('<CODICE>')`, mai con `===` — Electron antepone `Error invoking remote method '<canale>': Error:` al messaggio (`Unlock.tsx`, `ChangePasswordDialog.tsx` usano già `includes`); un confronto esatto non scatterebbe mai.
+- Nei test di UI che verificano un messaggio «invariato» si asserisce il testo esatto (`toBe('…')`), non solo `not.toBe(nuovoMessaggio)` — in `tests/unit/errore-apertura-ui.test.ts` i casi «altri errori» e «password errata» passavano anche con il messaggio generico sbagliato.
 
 ## Patterns
 - Nuova operazione esposta al renderer: handler `ipcMain.handle('<area>:<azione>')` in `src/main/ipc/handlers.ts` → metodo in `src/preload/index.ts` → tipo in `ElectronAPI` di `src/types/shared.ts`, non in `api.d.ts` (es. `clienti:count`): `api.d.ts` contiene solo l'aggancio a `Window` e duplicarvi i tipi li farebbe divergere.
