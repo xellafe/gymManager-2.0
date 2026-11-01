@@ -13,6 +13,7 @@
 - `BackupManifest` va definito una sola volta in `src/types/shared.ts` e importato dal main — era duplicato in `src/main/backup/backup-service.ts` e `src/types/shared.ts`, e un campo aggiunto a una sola copia fa divergere manifest scritto e tipo letto dal renderer.
 - Negli e2e Playwright non usare `locator.isVisible({ timeout })` per aspettare un elemento (il timeout è ignorato): usare `expect(locator).toBeVisible()` o `locator.waitFor()` — `tests/e2e/critical-flow.spec.ts` poteva controllare l'invito prima che comparisse.
 - Anche i `placeholder` degli input vanno in i18n come le altre stringhe UI — in `Unlock.tsx` e `CredenzialeRipristino.tsx` il formato chiave era hardcoded.
+- I campi composti da più input (come `PinInput`) hanno un gruppo con `aria-labelledby` e un `aria-label` per ogni casella — `src/renderer/src/components/sicurezza/PinInput.tsx` lo fa già; la regola evita regressioni in nuovi campi.
 
 ## Patterns
 - Nuova operazione esposta al renderer: handler `ipcMain.handle('<area>:<azione>')` in `src/main/ipc/handlers.ts` → metodo in `src/preload/index.ts` → tipo in `ElectronAPI` di `src/types/shared.ts`, non in `api.d.ts` (es. `clienti:count`): `api.d.ts` contiene solo l'aggancio a `Window` e duplicarvi i tipi li farebbe divergere.
@@ -27,6 +28,7 @@
 - Una modale che non deve chiudersi con Esc o clic fuori si ottiene con un'opzione di `ui/Modal`, senza riscriverla — `ChiaveRecuperoModal` duplicava overlay e pannello di `Modal` e perdeva il focus trap.
 - Uno slot di sblocco importato da una fonte esterna (manifest, `description` Drive) diventa corrente solo se `kekCifrata` si decifra con la `dbKey` del DB aperto — `applicaDopoRipristino` (`src/main/backup/restore-service.ts`) accettava lo slot senza verificarlo, e uno slot estraneo verrebbe poi ricifrato a ogni cambio password.
 - Pulsanti e input condivisi vanno in `components/ui/` o in un unico modulo di classi — `components/sicurezza/pin.ts` e `pages/Unlock.tsx` duplicavano le stesse stringhe Tailwind.
+- Una preferenza locale letta da più componenti con `settings.get()` passa da un hook condiviso — l'effect per `pin_visibile` era copiato in `Unlock.tsx`, `Setup.tsx`, `ImpostaPinDialog.tsx` e `SicurezzaSezione.tsx`, con il rischio che le copie divergano (fallback, cleanup).
 
 ## Reusable code
 - Importi, date e numero ricevuta (main/PDF): `src/main/domain/ricevuta-format.ts` (`formatImporto`, `formatDataIT`, `formatNumeroRicevuta`).
