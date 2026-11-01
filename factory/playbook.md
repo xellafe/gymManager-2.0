@@ -14,6 +14,8 @@
 - Negli e2e Playwright non usare `locator.isVisible({ timeout })` per aspettare un elemento (il timeout è ignorato): usare `expect(locator).toBeVisible()` o `locator.waitFor()` — `tests/e2e/critical-flow.spec.ts` poteva controllare l'invito prima che comparisse.
 - Anche i `placeholder` degli input vanno in i18n come le altre stringhe UI — in `Unlock.tsx` e `CredenzialeRipristino.tsx` il formato chiave era hardcoded.
 - I campi composti da più input (come `PinInput`) hanno un gruppo con `aria-labelledby` e un `aria-label` per ogni casella — `src/renderer/src/components/sicurezza/PinInput.tsx` lo fa già; la regola evita regressioni in nuovi campi.
+- Nei test su DB reale un errore `DB_APERTURA_FALLITA` indica quasi sempre il modulo nativo compilato per Electron: eseguire `npm rebuild better-sqlite3-multiple-ciphers` prima di cercare bug — 31 test fallivano solo per l'ABI.
+- Ogni nuovo codice di errore del main (es. `DB_APERTURA_FALLITA` in `src/main/db/database.ts`) ha un messaggio dedicato nel renderer o una scelta esplicita del messaggio generico — `Unlock.tsx` lo mostrava come errore generico senza indicare cosa fare.
 
 ## Patterns
 - Nuova operazione esposta al renderer: handler `ipcMain.handle('<area>:<azione>')` in `src/main/ipc/handlers.ts` → metodo in `src/preload/index.ts` → tipo in `ElectronAPI` di `src/types/shared.ts`, non in `api.d.ts` (es. `clienti:count`): `api.d.ts` contiene solo l'aggancio a `Window` e duplicarvi i tipi li farebbe divergere.
@@ -43,6 +45,8 @@
 - Non modificare `LOGO_BOX_WIDTH_PX`/`LOGO_BOX_HEIGHT_PX` per guadagnare spazio nella ricevuta — in `src/main/domain/ricevuta.ts` sono la sorgente unica anche del ridimensionamento del logo; cambiarle altera i loghi già caricati.
 - Non passare blob/data URL a `shell.openExternal` in `setWindowOpenHandler` (`src/main/index.ts`): i blob URL del renderer non esistono fuori dall'app.
 - Ogni finestra aperta con `action: 'allow'` in `setWindowOpenHandler` deve ricevere un proprio handler che nega `window.open` e la navigazione esterna (`did-create-window`): senza restrizioni un link nel contenuto caricherebbe un sito remoto in una finestra dell'app.
+- Non montare un componente che apre dialog con una propria `<form>` dentro la `<form>` di `SettingsPage`: i dialog vanno dopo `</form>` o in un portale che ferma il `submit` — `SicurezzaSezione` annidava le form e il submit nativo ricaricava la pagina senza eseguire gli handler.
+- Non tradurre ogni errore di apertura del DB in un errore di credenziali: solo `SQLITE_NOTADB` indica una chiave errata — `openDatabaseWithKey` trasformava un `NODE_MODULE_VERSION` in `PASSWORD_WRONG` e lo sblocco con PIN cancellava lo slot.
 
 ## Definition of Done
 - [gate] Build, lint and tests are green.
