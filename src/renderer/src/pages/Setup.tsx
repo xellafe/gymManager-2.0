@@ -1,7 +1,10 @@
 import React, { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import ChiaveRecuperoModal from '../components/sicurezza/ChiaveRecuperoModal'
+import { PIN_REGEX } from '../components/sicurezza/pin'
 
 type SetupState = 'idle' | 'submitting' | 'error'
+type SetupPhase = 'password' | 'chiave' | 'pin'
 
 interface SetupPageProps {
   onReady: () => void
@@ -13,6 +16,10 @@ export default function SetupPage({ onReady }: SetupPageProps): React.JSX.Elemen
   const [confirm, setConfirm] = useState('')
   const [status, setStatus] = useState<SetupState>('idle')
   const [errorMessage, setErrorMessage] = useState('')
+  const [phase, setPhase] = useState<SetupPhase>('password')
+  const [chiave, setChiave] = useState('')
+  const [pin, setPin] = useState('')
+  const [pinConferma, setPinConferma] = useState('')
 
   function validate(): string | null {
     if (password.length < 8) {
@@ -37,10 +44,54 @@ export default function SetupPage({ onReady }: SetupPageProps): React.JSX.Elemen
     setStatus('submitting')
     try {
       await window.api.db.setup(password)
-      onReady()
     } catch {
       setStatus('error')
       setErrorMessage(t('setup.error'))
+      return
+    }
+    // DB creato: se la chiave non si genera, si prosegue (l'invito comparirà nella dashboard).
+    try {
+      setChiave(await window.api.sicurezza.generaChiaveRecupero(password))
+      setPhase('chiave')
+    } catch {
+      onReady()
+    }
+  }
+
+  /** Dopo la conferma della chiave: passo PIN se disponibile, altrimenti dashboard. */
+  async function handleChiaveSalvata(): Promise<void> {
+    setChiave('')
+    setStatus('idle')
+    try {
+      const stato = await window.api.sicurezza.stato()
+      if (stato.pinDisponibile) {
+        setPhase('pin')
+        return
+      }
+    } catch {
+      // non bloccante: si prosegue senza il passo PIN
+    }
+    onReady()
+  }
+
+  async function handlePinSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault()
+    setErrorMessage('')
+    if (!PIN_REGEX.test(pin)) {
+      setErrorMessage(t('sicurezza.pin_formato'))
+      return
+    }
+    if (pin !== pinConferma) {
+      setErrorMessage(t('sicurezza.pin_mismatch'))
+      return
+    }
+    setStatus('submitting')
+    try {
+      await window.api.sicurezza.impostaPin(password, pin)
+      onReady()
+    } catch {
+      setStatus('error')
+      setErrorMessage(t('sicurezza.errore_generico'))
     }
   }
 
@@ -75,6 +126,91 @@ export default function SetupPage({ onReady }: SetupPageProps): React.JSX.Elemen
 
         {/* Card */}
         <div className="bg-surface-raised dark:bg-surface-raised rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-8">
+          {phase === 'pin' ? (
+            <form
+              data-testid="pin-form"
+              onSubmit={(e) => {
+                void handlePinSubmit(e)
+              }}
+              noValidate
+            >
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                {t('sicurezza.setup_pin_titolo')}
+              </h2>
+              <p className="mb-5 text-sm text-gray-500 dark:text-gray-400">
+                {t('sicurezza.pin_descrizione')}
+              </p>
+              <div className="mb-5">
+                <label
+                  htmlFor="setup-pin"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+                >
+                  {t('sicurezza.pin_label')}
+                </label>
+                <input
+                  id="setup-pin"
+                  data-testid="pin-input"
+                  type="password"
+                  autoComplete="off"
+                  maxLength={6}
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  disabled={isSubmitting}
+                  autoFocus
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3.5 py-2.5 text-sm placeholder-gray-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {t('sicurezza.pin_hint')}
+                </p>
+              </div>
+              <div className="mb-5">
+                <label
+                  htmlFor="setup-pin-conferma"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+                >
+                  {t('sicurezza.pin_conferma_label')}
+                </label>
+                <input
+                  id="setup-pin-conferma"
+                  data-testid="pin-confirm-input"
+                  type="password"
+                  autoComplete="off"
+                  maxLength={6}
+                  value={pinConferma}
+                  onChange={(e) => setPinConferma(e.target.value)}
+                  disabled={isSubmitting}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3.5 py-2.5 text-sm placeholder-gray-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                />
+              </div>
+              {errorMessage && (
+                <div
+                  role="alert"
+                  className="mb-5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400"
+                >
+                  {errorMessage}
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  data-testid="pin-salta"
+                  onClick={onReady}
+                  disabled={isSubmitting}
+                  className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium py-2.5 px-4 transition-colors focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed"
+                >
+                  {t('sicurezza.pin_salta')}
+                </button>
+                <button
+                  type="submit"
+                  data-testid="pin-imposta"
+                  disabled={isSubmitting}
+                  className="flex-1 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 text-white font-medium py-2.5 px-4 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? t('common.loading') : t('sicurezza.pin_imposta')}
+                </button>
+              </div>
+            </form>
+          ) : (
           <form data-testid="setup-form" onSubmit={handleSubmit} noValidate>
             {/* Campo password */}
             <div className="mb-5">
@@ -141,8 +277,18 @@ export default function SetupPage({ onReady }: SetupPageProps): React.JSX.Elemen
               {isSubmitting ? t('common.loading') : t('setup.submit')}
             </button>
           </form>
+          )}
         </div>
       </div>
+
+      {phase === 'chiave' && (
+        <ChiaveRecuperoModal
+          chiave={chiave}
+          onClose={() => {
+            void handleChiaveSalvata()
+          }}
+        />
+      )}
     </div>
   )
 }

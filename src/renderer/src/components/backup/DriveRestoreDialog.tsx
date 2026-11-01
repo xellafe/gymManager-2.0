@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Modal from '../ui/Modal'
+import {
+  CredenzialeRipristinoCampi,
+  costruisciCredenziali,
+  erroreChiaveRipristino,
+  type ModoCredenziale
+} from '../sicurezza/CredenzialeRipristino'
 import type { DriveBackupItem } from '../../../../types/shared'
 
 interface DriveRestoreDialogProps {
@@ -17,7 +23,9 @@ export default function DriveRestoreDialog({
   const [loadingList, setLoadingList] = useState(false)
   const [listError, setListError] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [modo, setModo] = useState<ModoCredenziale>('password')
   const [password, setPassword] = useState('')
+  const [chiave, setChiave] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -37,7 +45,9 @@ export default function DriveRestoreDialog({
     if (isLoading) return
     setItems([])
     setSelectedId(null)
+    setModo('password')
     setPassword('')
+    setChiave('')
     setError(null)
     setSuccess(false)
     onClose()
@@ -47,13 +57,18 @@ export default function DriveRestoreDialog({
     e.preventDefault()
     setError(null)
     if (!selectedId) return
-    if (!password) {
-      setError(t('backup.ripristina_password_obbligatoria'))
+    const credenziali = costruisciCredenziali(modo, password, chiave)
+    if (credenziali === null) {
+      setError(
+        modo === 'password'
+          ? t('backup.ripristina_password_obbligatoria')
+          : t('backup.ripristina_chiave_obbligatoria')
+      )
       return
     }
     setIsLoading(true)
     try {
-      await window.api.backup.drive.restore({ fileId: selectedId, password })
+      await window.api.backup.drive.restore({ fileId: selectedId, ...credenziali })
       setSuccess(true)
       setTimeout(() => {
         if ('restart' in window.api.app) {
@@ -62,8 +77,9 @@ export default function DriveRestoreDialog({
           window.location.reload()
         }
       }, 2000)
-    } catch {
-      setError(t('backup.drive_ripristina_errore'))
+    } catch (err: unknown) {
+      const chiaveKey = erroreChiaveRipristino(err)
+      setError(chiaveKey !== null ? t(chiaveKey) : t('backup.drive_ripristina_errore'))
     } finally {
       setIsLoading(false)
     }
@@ -131,24 +147,17 @@ export default function DriveRestoreDialog({
               )}
             </div>
 
-            {/* Master password del backup */}
-            <div>
-              <label
-                htmlFor="drive-restore-password"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-              >
-                {t('backup.ripristina_password')}
-              </label>
-              <input
-                id="drive-restore-password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setError(null) }}
-                disabled={isLoading}
-                className="block w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
-              />
-            </div>
+            {/* Credenziale del backup: master password o chiave di recupero */}
+            <CredenzialeRipristinoCampi
+              idPrefix="drive-restore"
+              modo={modo}
+              onModo={(m) => { setModo(m); setError(null) }}
+              password={password}
+              onPassword={(v) => { setPassword(v); setError(null) }}
+              chiave={chiave}
+              onChiave={(v) => { setChiave(v); setError(null) }}
+              disabled={isLoading}
+            />
 
             {/* Errore */}
             {error !== null && (

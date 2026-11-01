@@ -9,6 +9,7 @@ import RestoreDialog from '../components/backup/RestoreDialog'
 import ResetPasswordDialog from '../components/backup/ResetPasswordDialog'
 import ChangePasswordDialog from '../components/backup/ChangePasswordDialog'
 import DriveRestoreDialog from '../components/backup/DriveRestoreDialog'
+import SicurezzaSezione from '../components/sicurezza/SicurezzaSezione'
 import { ridimensionaLogo } from '../utils/logo'
 
 // ── Colori preset ─────────────────────────────────────────────────────────────
@@ -1410,6 +1411,9 @@ export default function SettingsPage(): React.JSX.Element {
               {t('backup.cambia_password_pulsante')}
             </button>
           </div>
+
+          {/* Sicurezza — Chiave di recupero e PIN */}
+          <SicurezzaSezione />
 
           {/* Sicurezza — Reset password */}
           <div>
