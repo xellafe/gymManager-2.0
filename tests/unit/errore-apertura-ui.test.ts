@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import '../../src/renderer/src/i18n'
+import i18n from '../../src/renderer/src/i18n'
 import SetupPage from '../../src/renderer/src/pages/Setup'
 import UnlockPage from '../../src/renderer/src/pages/Unlock'
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -91,9 +91,9 @@ describe('errore tecnico di apertura del database (UI)', () => {
       scrivi(q<HTMLInputElement>('password-confirm-input')!, 'password123')
     })
     await inviaForm('setup-form')
-    const testo = document.querySelector('[role="alert"]')?.textContent
-    expect(testo).toBeTruthy()
-    expect(testo).not.toBe(MESSAGGIO)
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+      'Errore durante la configurazione. Riprova.'
+    )
   })
 
   it('Unlock con PIN: messaggio dedicato, caselle svuotate, nessun pannello di ripristino; poi password', async () => {
@@ -124,6 +124,7 @@ describe('errore tecnico di apertura del database (UI)', () => {
     await inviaForm('unlock-form')
     expect(q('unlock-error')?.textContent).toBe(MESSAGGIO)
     expect(q('recovery-panel')).toBeNull()
+    expect(q<HTMLButtonElement>('unlock-submit')!.disabled).toBe(false)
   })
 
   it('Unlock con chiave di recupero: messaggio dedicato', async () => {
@@ -160,8 +161,24 @@ describe('errore tecnico di apertura del database (UI)', () => {
       scrivi(q<HTMLInputElement>('password-input')!, 'sbagliata1')
     })
     await inviaForm('unlock-form')
-    const testo = q('unlock-error')?.textContent
-    expect(testo).toBeTruthy()
-    expect(testo).not.toBe(MESSAGGIO)
+    expect(q('unlock-error')?.textContent).toBe('Password errata. Riprova.')
+  })
+
+  it('Unlock: MIGRATION_FAILED mostra il messaggio di migrazione e il pannello di ripristino', async () => {
+    api.sicurezza.stato.mockResolvedValue({
+      recuperoAttivo: false,
+      pinAttivo: false,
+      pinBloccatoFino: null,
+      pinDisponibile: true
+    })
+    api.db.unlock.mockRejectedValue(rifiuto('db:unlock', 'MIGRATION_FAILED'))
+    await monta(React.createElement(UnlockPage, { onReady: vi.fn() }))
+    await act(async () => {
+      scrivi(q<HTMLInputElement>('password-input')!, 'password123')
+    })
+    await inviaForm('unlock-form')
+    expect(q('recovery-panel')).not.toBeNull()
+    expect(q('recovery-panel')?.textContent).toContain(i18n.t('unlock.recovery_titolo'))
+    expect(document.body.textContent).not.toContain(MESSAGGIO)
   })
 })
