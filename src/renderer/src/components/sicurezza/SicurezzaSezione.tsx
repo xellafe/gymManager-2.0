@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import GeneraChiaveDialog from './GeneraChiaveDialog'
@@ -84,7 +85,9 @@ export default function SicurezzaSezione(): React.JSX.Element | null {
           {t('sicurezza.chiave_sezione_descrizione')}
         </p>
         <p className="text-xs text-gray-600 dark:text-gray-300 mb-3">
-          {stato.recuperoAttivo ? t('sicurezza.chiave_stato_attiva') : t('sicurezza.chiave_stato_assente')}
+          {stato.recuperoAttivo
+            ? t('sicurezza.chiave_stato_attiva')
+            : t('sicurezza.chiave_stato_assente')}
         </p>
         <button
           type="button"
@@ -92,7 +95,9 @@ export default function SicurezzaSezione(): React.JSX.Element | null {
           onClick={() => setMostraChiave(true)}
           className={CLASSE_BOTTONE_PRIMARIO}
         >
-          {stato.recuperoAttivo ? t('sicurezza.rigenera_pulsante') : t('sicurezza.genera_pulsante_sezione')}
+          {stato.recuperoAttivo
+            ? t('sicurezza.rigenera_pulsante')
+            : t('sicurezza.genera_pulsante_sezione')}
         </button>
       </div>
 
@@ -175,35 +180,41 @@ export default function SicurezzaSezione(): React.JSX.Element | null {
         )}
       </div>
 
-      <GeneraChiaveDialog
-        isOpen={mostraChiave}
-        variante={stato.recuperoAttivo ? 'rigenera' : 'genera'}
-        onClose={() => setMostraChiave(false)}
-        onGenerata={() => {
-          void carica()
-        }}
-      />
-      <ImpostaPinDialog
-        isOpen={mostraPin}
-        cambio={stato.pinAttivo}
-        onClose={() => setMostraPin(false)}
-        onImpostato={() => {
-          setMostraPin(false)
-          void carica()
-        }}
-      />
-      <ConfirmDialog
-        isOpen={mostraDisattiva}
-        onClose={() => setMostraDisattiva(false)}
-        onConfirm={() => {
-          void disattiva()
-        }}
-        title={t('sicurezza.pin_disattiva_titolo')}
-        message={t('sicurezza.pin_disattiva_messaggio')}
-        confirmLabel={t('sicurezza.pin_disattiva')}
-        isLoading={disattivando}
-        errorMessage={disattivaErrore}
-      />
+      {/* Portale su body + stop del submit sintetico: nessuna <form> annidata in quella delle Impostazioni */}
+      {createPortal(
+        <div onSubmit={(e) => e.stopPropagation()}>
+          <GeneraChiaveDialog
+            isOpen={mostraChiave}
+            variante={stato.recuperoAttivo ? 'rigenera' : 'genera'}
+            onClose={() => setMostraChiave(false)}
+            onGenerata={() => {
+              void carica()
+            }}
+          />
+          <ImpostaPinDialog
+            isOpen={mostraPin}
+            cambio={stato.pinAttivo}
+            onClose={() => setMostraPin(false)}
+            onImpostato={() => {
+              setMostraPin(false)
+              void carica()
+            }}
+          />
+          <ConfirmDialog
+            isOpen={mostraDisattiva}
+            onClose={() => setMostraDisattiva(false)}
+            onConfirm={() => {
+              void disattiva()
+            }}
+            title={t('sicurezza.pin_disattiva_titolo')}
+            message={t('sicurezza.pin_disattiva_messaggio')}
+            confirmLabel={t('sicurezza.pin_disattiva')}
+            isLoading={disattivando}
+            errorMessage={disattivaErrore}
+          />
+        </div>,
+        document.body
+      )}
     </>
   )
 }
