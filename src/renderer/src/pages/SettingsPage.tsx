@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next'
 import i18n from '../i18n'
 import { applyTheme, applyPrimaryColor } from '../theme'
 import { useSettings } from '../context/SettingsContext'
-import type { AppSettings } from '../../../types/shared'
+import type { AppSettings, VoceChangelog } from '../../../types/shared'
+import ChangelogModal from '../components/ChangelogModal'
 import RestoreDialog from '../components/backup/RestoreDialog'
 import ResetPasswordDialog from '../components/backup/ResetPasswordDialog'
 import ChangePasswordDialog from '../components/backup/ChangePasswordDialog'
@@ -144,6 +145,8 @@ export default function SettingsPage(): React.JSX.Element {
 
   // Versione app e controllo aggiornamenti
   const [appVersion, setAppVersion] = useState('')
+  const [novitaCorrente, setNovitaCorrente] = useState<VoceChangelog[]>([])
+  const [novitaAperte, setNovitaAperte] = useState(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [updateCheckResult, setUpdateCheckResult] = useState<'idle' | 'errore'>('idle')
   const [updateErrorMsg, setUpdateErrorMsg] = useState<string | null>(null)
@@ -213,6 +216,7 @@ export default function SettingsPage(): React.JSX.Element {
     setIsLoading(true)
     void window.api.backup.drive.isConnected().then(c => setDriveConnected(c)).catch(() => {})
     void window.api.app.getVersion().then(v => setAppVersion(v)).catch(() => {})
+    void window.api.changelog.getCurrent().then(v => setNovitaCorrente(v)).catch(() => {})
     void window.api.sync.status().then(s => setSyncStatus(s)).catch(() => {})
     Promise.all([
       window.api.settings.get(),
@@ -1602,6 +1606,15 @@ export default function SettingsPage(): React.JSX.Element {
             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
               {appVersion !== '' ? `v${appVersion}` : '…'}
             </p>
+            {novitaCorrente.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setNovitaAperte(true)}
+                className="mt-1 text-sm text-primary-600 dark:text-primary-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+              >
+                {t('changelog.apri')}
+              </button>
+            )}
           </div>
 
           <button
@@ -1655,6 +1668,11 @@ export default function SettingsPage(): React.JSX.Element {
         onClose={() => setShowChangePasswordDialog(false)}
       />
       <DriveRestoreDialog isOpen={showDriveRestore} onClose={() => setShowDriveRestore(false)} />
+      <ChangelogModal
+        isOpen={novitaAperte}
+        voci={novitaCorrente}
+        onClose={() => setNovitaAperte(false)}
+      />
     </div>
   )
 }

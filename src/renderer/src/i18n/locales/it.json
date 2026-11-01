@@ -509,6 +509,13 @@
       "vuoto": "Nessun compleanno questa settimana"
     }
   },
+  "changelog": {
+    "titolo": "Novità della versione",
+    "versione": "Versione {{versione}}",
+    "versione_data": "Versione {{versione}} — {{data}}",
+    "chiudi": "Chiudi",
+    "apri": "Novità della versione"
+  },
   "aggiornamento": {
     "disponibile": "Aggiornamento {{version}} disponibile. Download in corso...",
     "trovato": "Aggiornamento {{version}} disponibile",

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SettingsProvider } from '../context/SettingsContext'
 import DashboardPage from './DashboardPage'
@@ -8,7 +8,8 @@ import ReceiptsPage from './ReceiptsPage'
 import SettingsPage from './SettingsPage'
 import UpdateNotification from '../components/updater/UpdateNotification'
 import UpdateCheckSnackbar from '../components/updater/UpdateCheckSnackbar'
-import type { ClientiFilters } from '../../../types/shared'
+import ChangelogModal from '../components/ChangelogModal'
+import type { ClientiFilters, VoceChangelog } from '../../../types/shared'
 
 type NavItem = 'dashboard' | 'clients' | 'catalog' | 'receipts' | 'settings'
 
@@ -118,6 +119,26 @@ export default function ShellPage(): React.JSX.Element {
   const [activeNav, setActiveNav] = useState<NavItem>('dashboard')
   const [clientFilter, setClientFilter] = useState<ClientiFilters | undefined>(undefined)
   const [receiptsFilter, setReceiptsFilter] = useState<ReceiptsFilter | undefined>(undefined)
+  const [novita, setNovita] = useState<VoceChangelog[]>([])
+  const [novitaAperte, setNovitaAperte] = useState(false)
+
+  // Novità non ancora viste: errori ignorati (nessun modale, riproverà al prossimo avvio)
+  useEffect(() => {
+    void window.api.changelog
+      .getPending()
+      .then((voci) => {
+        if (voci.length > 0) {
+          setNovita(voci)
+          setNovitaAperte(true)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  function chiudiNovita(): void {
+    setNovitaAperte(false)
+    void window.api.changelog.markSeen().catch(() => {})
+  }
 
   /** Gestisce la navigazione proveniente dalla Dashboard (drill-down). */
   function handleDashboardNavigate(section: string, params?: Record<string, unknown>): void {
@@ -237,6 +258,7 @@ export default function ShellPage(): React.JSX.Element {
       {/* Notifica aggiornamento — overlay non invasivo posizionato in fondo */}
       <UpdateNotification />
       <UpdateCheckSnackbar />
+      <ChangelogModal isOpen={novitaAperte} voci={novita} onClose={chiudiNovita} />
     </div>
     </SettingsProvider>
   )
