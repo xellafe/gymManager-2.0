@@ -46,6 +46,29 @@ export interface AppSettings {
   receipt_download_dir: string
   /** Ultima cartella in cui è stata salvata una ricevuta; scritta solo dal main (percorso locale, non sincronizzato). */
   receipt_last_dir: string
+  /** Ultima versione dell'app di cui l'utente ha visto le novità; scritta solo dal main (locale, non sincronizzata). */
+  last_seen_version: string
+}
+
+// ── Changelog ─────────────────────────────────────────────────────────────────
+
+export interface SegmentoChangelog {
+  tipo: 'testo' | 'grassetto' | 'corsivo' | 'codice'
+  testo: string
+}
+
+export type TipoBloccoChangelog = 'titolo' | 'voce' | 'paragrafo'
+
+export interface BloccoChangelog {
+  tipo: TipoBloccoChangelog
+  segmenti: SegmentoChangelog[]
+}
+
+export interface VoceChangelog {
+  versione: string
+  /** gg/mm/aaaa oppure '' se assente. */
+  data: string
+  blocchi: BloccoChangelog[]
 }
 
 export type DbState = 'firstRun' | 'locked' | 'ready'
@@ -515,6 +538,14 @@ export interface ElectronAPI {
   }
   app: {
     getVersion: () => Promise<string>
+  }
+  changelog: {
+    /** Novità non ancora viste dall'utente (dalla più recente). */
+    getPending: () => Promise<VoceChangelog[]>
+    /** Registra la versione corrente come vista. */
+    markSeen: () => Promise<void>
+    /** Note della versione installata (0 o 1 voce). */
+    getCurrent: () => Promise<VoceChangelog[]>
   }
   clienti: {
     list: (filters?: ClientiFilters) => Promise<ClienteRow[]>

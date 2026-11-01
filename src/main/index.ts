@@ -6,6 +6,7 @@ import { closeDatabase, isDatabaseOpen } from './db/database'
 import { registerIpcHandlers } from './ipc/handlers'
 import { loadSettings } from './settings/store'
 import { gestisciDownload } from './settings/cartella-ricevute'
+import { inizializzaVersioneVista } from './changelog/changelog-service'
 import { backupAutomatico } from './backup/backup-service'
 import { stopBackupScheduler } from './backup/backup-scheduler'
 import { initAutoUpdater } from './updater/auto-updater'
@@ -82,6 +83,13 @@ app.whenReady().then(() => {
 
   // «Salva con nome» delle ricevute (Scarica e visualizzatore PDF) parte dalla cartella risolta
   session.defaultSession.on('will-download', (_e, item) => gestisciDownload(item))
+
+  // Nuova installazione: registra la versione corrente prima che il DB venga creato
+  try {
+    inizializzaVersioneVista()
+  } catch (err) {
+    log.warn('[main] Inizializzazione versione vista fallita (non bloccante):', err)
+  }
 
   createWindow()
 
