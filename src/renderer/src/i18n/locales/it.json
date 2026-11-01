@@ -2,7 +2,8 @@
   "app": {
     "name": "GymManager",
     "loading": "Caricamento...",
-    "error": "Errore"
+    "error": "Errore",
+    "db_apertura_fallita": "Impossibile decodificare i dati a causa di un errore interno"
   },
   "setup": {
     "title": "Benvenuto in GymManager",

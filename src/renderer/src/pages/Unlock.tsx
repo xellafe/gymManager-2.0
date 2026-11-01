@@ -118,7 +118,12 @@ export default function UnlockPage({ onReady }: UnlockPageProps): React.JSX.Elem
     } catch (err) {
       setStatus('error')
       const message = err instanceof Error ? err.message : ''
-      if (message.toLowerCase().includes('errata') || message.toLowerCase().includes('wrong')) {
+      if (message.includes('DB_APERTURA_FALLITA')) {
+        setErrorMessage(t('app.db_apertura_fallita'))
+      } else if (
+        message.toLowerCase().includes('errata') ||
+        message.toLowerCase().includes('wrong')
+      ) {
         setErrorMessage(t('unlock.wrong_password'))
       } else if (!(await gestisciMigrazioneFallita(message))) {
         setErrorMessage(t('unlock.error'))
@@ -169,7 +174,10 @@ export default function UnlockPage({ onReady }: UnlockPageProps): React.JSX.Elem
     } catch (err) {
       setStatus('error')
       const message = err instanceof Error ? err.message : ''
-      if (!(await gestisciMigrazioneFallita(message))) {
+      if (message.includes('DB_APERTURA_FALLITA')) {
+        setPin('')
+        setErrorMessage(t('app.db_apertura_fallita'))
+      } else if (!(await gestisciMigrazioneFallita(message))) {
         setErrorMessage(t('unlock.error'))
       }
     }
@@ -189,7 +197,9 @@ export default function UnlockPage({ onReady }: UnlockPageProps): React.JSX.Elem
     } catch (err) {
       setStatus('error')
       const message = err instanceof Error ? err.message : ''
-      if (message.includes('CHIAVE_ERRATA')) {
+      if (message.includes('DB_APERTURA_FALLITA')) {
+        setErrorMessage(t('app.db_apertura_fallita'))
+      } else if (message.includes('CHIAVE_ERRATA')) {
         setErrorMessage(t('unlock.chiave_errata'))
       } else if (message.includes('RECUPERO_NON_DISPONIBILE')) {
         setErrorMessage(t('unlock.chiave_non_disponibile'))
@@ -228,7 +238,7 @@ export default function UnlockPage({ onReady }: UnlockPageProps): React.JSX.Elem
     const res = await window.api.dialog.showOpenDialog({
       title: t('unlock.recovery_lista_titolo'),
       properties: ['openFile'],
-      filters: [{ name: 'Database', extensions: ['db'] }],
+      filters: [{ name: 'Database', extensions: ['db'] }]
     })
     if (!res.canceled && res.filePaths.length > 0) {
       await eseguiRipristino(res.filePaths[0])
@@ -542,7 +552,9 @@ export default function UnlockPage({ onReady }: UnlockPageProps): React.JSX.Elem
                         disabled={restoring}
                         className="ml-3 shrink-0 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 text-white text-sm font-medium py-1.5 px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed"
                       >
-                        {restoring ? t('unlock.recovery_in_corso') : t('unlock.recovery_ripristina')}
+                        {restoring
+                          ? t('unlock.recovery_in_corso')
+                          : t('unlock.recovery_ripristina')}
                       </button>
                     </li>
                   ))}

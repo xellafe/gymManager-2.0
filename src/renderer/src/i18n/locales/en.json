@@ -2,7 +2,8 @@
   "app": {
     "name": "GymManager",
     "loading": "Loading...",
-    "error": "Error"
+    "error": "Error",
+    "db_apertura_fallita": "Unable to decrypt the data due to an internal error"
   },
   "setup": {
     "title": "Welcome to GymManager",
