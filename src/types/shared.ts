@@ -42,6 +42,10 @@ export interface AppSettings {
   backup_periodic_hours: number
   /** Numero di backup da conservare nella cartella (rotazione, 1–100). */
   backup_retention: number
+  /** Cartella in cui si apre «Salva con nome» delle ricevute; vuoto = nessuna (percorso locale, non sincronizzato). */
+  receipt_download_dir: string
+  /** Ultima cartella in cui è stata salvata una ricevuta; scritta solo dal main (percorso locale, non sincronizzato). */
+  receipt_last_dir: string
 }
 
 export type DbState = 'firstRun' | 'locked' | 'ready'
