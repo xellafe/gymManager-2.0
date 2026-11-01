@@ -61,9 +61,12 @@ export default function SetupPage({ onReady }: SetupPageProps): React.JSX.Elemen
     setStatus('submitting')
     try {
       await window.api.db.setup(password)
-    } catch {
+    } catch (err) {
       setStatus('error')
-      setErrorMessage(t('setup.error'))
+      const message = err instanceof Error ? err.message : ''
+      setErrorMessage(
+        message.includes('DB_APERTURA_FALLITA') ? t('app.db_apertura_fallita') : t('setup.error')
+      )
       return
     }
     // DB creato: se la chiave non si genera, si prosegue (l'invito comparirà nella dashboard).
