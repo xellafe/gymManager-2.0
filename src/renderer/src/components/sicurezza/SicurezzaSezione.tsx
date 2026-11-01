@@ -15,6 +15,8 @@ export default function SicurezzaSezione(): React.JSX.Element | null {
   const [mostraDisattiva, setMostraDisattiva] = useState(false)
   const [disattivaErrore, setDisattivaErrore] = useState<string | null>(null)
   const [disattivando, setDisattivando] = useState(false)
+  const [pinVisibile, setPinVisibile] = useState(false)
+  const [pinVisibileErrore, setPinVisibileErrore] = useState<string | null>(null)
 
   const carica = useCallback(async (): Promise<void> => {
     try {
@@ -27,6 +29,33 @@ export default function SicurezzaSezione(): React.JSX.Element | null {
   useEffect(() => {
     void carica()
   }, [carica])
+
+  useEffect(() => {
+    let attivo = true
+    window.api.settings
+      .get()
+      .then((st) => {
+        if (attivo) setPinVisibile(st.pin_visibile)
+      })
+      .catch(() => {
+        if (attivo) setPinVisibile(false)
+      })
+    return () => {
+      attivo = false
+    }
+  }, [])
+
+  async function togglePinVisibile(): Promise<void> {
+    const precedente = pinVisibile
+    setPinVisibileErrore(null)
+    setPinVisibile(!precedente)
+    try {
+      await window.api.settings.set({ pin_visibile: !precedente })
+    } catch {
+      setPinVisibile(precedente)
+      setPinVisibileErrore(t('sicurezza.errore_generico'))
+    }
+  }
 
   async function disattiva(): Promise<void> {
     setDisattivaErrore(null)
@@ -77,6 +106,48 @@ export default function SicurezzaSezione(): React.JSX.Element | null {
             ? t('sicurezza.pin_sezione_descrizione')
             : t('sicurezza.pin_non_disponibile')}
         </p>
+        {stato.pinDisponibile && (
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <p
+                id="pin-mostra-label"
+                className="text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                {t('sicurezza.pin_mostra')}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                {t('sicurezza.pin_mostra_descrizione')}
+              </p>
+              {pinVisibileErrore !== null && (
+                <p role="alert" className="text-xs text-red-600 dark:text-red-400 mt-1">
+                  {pinVisibileErrore}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              data-testid="pin-mostra-toggle"
+              onClick={() => {
+                void togglePinVisibile()
+              }}
+              className={[
+                'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
+                pinVisibile ? 'bg-primary-600' : 'bg-gray-200 dark:bg-gray-700'
+              ].join(' ')}
+              role="switch"
+              aria-checked={pinVisibile}
+              aria-labelledby="pin-mostra-label"
+            >
+              <span
+                className={[
+                  'inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform',
+                  pinVisibile ? 'translate-x-6' : 'translate-x-1'
+                ].join(' ')}
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+        )}
         {stato.pinDisponibile && (
           <div className="flex flex-wrap gap-3">
             <button

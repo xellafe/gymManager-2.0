@@ -48,6 +48,8 @@ export interface AppSettings {
   receipt_last_dir: string
   /** Ultima versione dell'app di cui l'utente ha visto le novità; scritta solo dal main (locale, non sincronizzata). */
   last_seen_version: string
+  /** Mostra i caratteri del PIN mentre si digita; locale al PC (non sincronizzata), leggibile a DB chiuso. */
+  pin_visibile: boolean
 }
 
 // ── Changelog ─────────────────────────────────────────────────────────────────

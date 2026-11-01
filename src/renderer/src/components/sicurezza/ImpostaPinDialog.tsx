@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Modal from '../ui/Modal'
+import PinInput from './PinInput'
 import {
   CLASSE_BOTTONE_PRIMARIO,
   CLASSE_BOTTONE_SECONDARIO,
@@ -30,6 +31,23 @@ export default function ImpostaPinDialog({
   const [conferma, setConferma] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pinVisibile, setPinVisibile] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) return
+    let attivo = true
+    window.api.settings
+      .get()
+      .then((st) => {
+        if (attivo) setPinVisibile(st.pin_visibile)
+      })
+      .catch(() => {
+        if (attivo) setPinVisibile(false)
+      })
+    return () => {
+      attivo = false
+    }
+  }, [isOpen])
 
   function reset(): void {
     setPassword('')
@@ -112,45 +130,43 @@ export default function ImpostaPinDialog({
         </div>
         <div>
           <label
-            htmlFor="imposta-pin-pin"
+            id="imposta-pin-label"
+            htmlFor="imposta-pin-1"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
           >
             {t('sicurezza.pin_label')}
           </label>
-          <input
-            id="imposta-pin-pin"
-            type="password"
-            autoComplete="off"
-            maxLength={6}
+          <PinInput
+            idPrefix="imposta-pin"
+            testId="imposta-pin"
             value={pin}
-            onChange={(e) => {
-              setPin(e.target.value)
+            onChange={(v) => {
+              setPin(v)
               setError(null)
             }}
+            visibile={pinVisibile}
             disabled={isLoading}
-            className={CLASSE_INPUT}
           />
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t('sicurezza.pin_hint')}</p>
         </div>
         <div>
           <label
-            htmlFor="imposta-pin-conferma"
+            id="imposta-pin-conferma-label"
+            htmlFor="imposta-pin-conferma-1"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
           >
             {t('sicurezza.pin_conferma_label')}
           </label>
-          <input
-            id="imposta-pin-conferma"
-            type="password"
-            autoComplete="off"
-            maxLength={6}
+          <PinInput
+            idPrefix="imposta-pin-conferma"
+            testId="imposta-pin-conferma"
             value={conferma}
-            onChange={(e) => {
-              setConferma(e.target.value)
+            onChange={(v) => {
+              setConferma(v)
               setError(null)
             }}
+            visibile={pinVisibile}
             disabled={isLoading}
-            className={CLASSE_INPUT}
           />
         </div>
         {error !== null && (

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BackupLocaleInfo, StatoSblocco } from '../../../types/shared'
+import PinInput from '../components/sicurezza/PinInput'
 import { PIN_REGEX } from '../components/sicurezza/pin'
 
 type UnlockState = 'idle' | 'submitting' | 'error'
@@ -33,6 +34,7 @@ export default function UnlockPage({ onReady }: UnlockPageProps): React.JSX.Elem
   const [mode, setMode] = useState<UnlockMode | null>(null)
   const [stato, setStato] = useState<StatoSblocco | null>(null)
   const [pin, setPin] = useState('')
+  const [pinVisibile, setPinVisibile] = useState(false)
   const [chiave, setChiave] = useState('')
   const [bloccatoFino, setBloccatoFino] = useState<string | null>(null)
   const [adesso, setAdesso] = useState(() => Date.now())
@@ -51,6 +53,22 @@ export default function UnlockPage({ onReady }: UnlockPageProps): React.JSX.Elem
       })
       .catch(() => {
         if (attivo) setMode('password')
+      })
+    return () => {
+      attivo = false
+    }
+  }, [])
+
+  // Preferenza "Mostra PIN" (locale al PC, leggibile a DB chiuso)
+  useEffect(() => {
+    let attivo = true
+    window.api.settings
+      .get()
+      .then((st) => {
+        if (attivo) setPinVisibile(st.pin_visibile)
+      })
+      .catch(() => {
+        if (attivo) setPinVisibile(false)
       })
     return () => {
       attivo = false
@@ -110,14 +128,18 @@ export default function UnlockPage({ onReady }: UnlockPageProps): React.JSX.Elem
 
   async function handlePinSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault()
+    await inviaPin(pin)
+  }
+
+  async function inviaPin(valore: string): Promise<void> {
     setErrorMessage('')
-    if (!PIN_REGEX.test(pin)) {
+    if (!PIN_REGEX.test(valore)) {
       setErrorMessage(t('unlock.pin_errato'))
       return
     }
     setStatus('submitting')
     try {
-      const esito = await window.api.db.unlockPin(pin)
+      const esito = await window.api.db.unlockPin(valore)
       switch (esito.esito) {
         case 'ok':
           onReady()
@@ -278,22 +300,23 @@ export default function UnlockPage({ onReady }: UnlockPageProps): React.JSX.Elem
             >
               <div className="mb-5">
                 <label
-                  htmlFor="pin"
+                  id="pin-label"
+                  htmlFor="pin-1"
                   className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
                 >
                   {t('unlock.pin_label')}
                 </label>
-                <input
-                  id="pin"
-                  data-testid="pin-input"
-                  type="password"
-                  autoComplete="off"
-                  maxLength={6}
+                <PinInput
+                  idPrefix="pin"
+                  testId="pin-input"
                   value={pin}
-                  onChange={(e) => setPin(e.target.value)}
+                  onChange={setPin}
+                  visibile={pinVisibile}
                   disabled={isSubmitting || pinBloccato}
                   autoFocus
-                  className={CLASSE_INPUT}
+                  onCompleto={(v) => {
+                    if (!isSubmitting && !pinBloccato) void inviaPin(v)
+                  }}
                 />
               </div>
 
