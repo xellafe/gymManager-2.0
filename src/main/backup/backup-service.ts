@@ -13,18 +13,10 @@ import { join, dirname } from 'path'
 import log from 'electron-log'
 import { DB_PATH, getDatabase, isDatabaseOpen } from '../db/database'
 import { loadSettings } from '../settings/store'
-import type { BackupLocaleInfo } from '../../types/shared'
+import { getSlotRecupero } from '../sicurezza/sblocco-service'
+import type { BackupLocaleInfo, BackupManifest } from '../../types/shared'
 
-export interface BackupManifest {
-  /** Versione schema DB al momento del backup (PRAGMA user_version). */
-  version: number
-  /** ISO datetime di creazione backup. */
-  createdAt: string
-  /** Versione dell'applicazione. */
-  appVersion: string
-  /** Percorso originale del file DB (per info). */
-  dbPath: string
-}
+export type { BackupManifest }
 
 /**
  * Legge PRAGMA user_version dal DB aperto.
@@ -42,7 +34,8 @@ function getUserVersion(): number {
  *
  * Il backup è la copia diretta del file DB cifrato con SQLCipher —
  * nessuna ulteriore cifratura viene aggiunta.
- * Accanto al file .db viene scritto un file .manifest.json con i metadati.
+ * Accanto al file .db viene scritto un file .manifest.json con i metadati
+ * (e lo slot della chiave di recupero, se generata).
  *
  * @param destinazionePath - Percorso completo del file di destinazione (.db)
  * @returns Il manifest del backup creato
@@ -66,6 +59,9 @@ export async function backupLocale(destinazionePath: string): Promise<BackupMani
     appVersion: app.getVersion(),
     dbPath: DB_PATH
   }
+  // Slot della chiave di recupero corrente: il backup si potrà aprire anche con la chiave
+  const recupero = getSlotRecupero()
+  if (recupero !== null) manifest.recupero = recupero
 
   // Scrivi il manifest accanto al backup
   const manifestPath = destinazionePath + '.manifest.json'

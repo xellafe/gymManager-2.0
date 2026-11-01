@@ -71,7 +71,43 @@ export interface VoceChangelog {
   blocchi: BloccoChangelog[]
 }
 
-export type DbState = 'firstRun' | 'locked' | 'ready'
+/** `recupero`: DB aperto con la chiave di recupero, in attesa della nuova master password. */
+export type DbState = 'firstRun' | 'locked' | 'ready' | 'recupero'
+
+// ── Sblocco alternativo (chiave di recupero, PIN) ─────────────────────────────
+
+/**
+ * Slot di sblocco: la chiave SQLCipher cifrata con una KEK derivata (scrypt) da un segreto
+ * (chiave di recupero normalizzata o PIN). Ogni campo cifrato è `iv|tag|ciphertext` in base64.
+ */
+export interface SlotSblocco {
+  versione: 1
+  /** Salt scrypt (16 byte, base64). */
+  salt: string
+  /** AES-256-GCM(KEK, dbKey). */
+  dbKeyCifrata: string
+  /** AES-256-GCM(dbKey, KEK): permette di ricifrare lo slot quando cambia dbKey. */
+  kekCifrata: string
+}
+
+/** Stato dei metodi di sblocco alternativi (leggibile anche a DB chiuso). */
+export interface StatoSblocco {
+  recuperoAttivo: boolean
+  pinAttivo: boolean
+  /** ISO datetime di fine blocco del PIN, `null` se non bloccato. */
+  pinBloccatoFino: string | null
+  /** false se il sistema non offre la cifratura locale (safeStorage). */
+  pinDisponibile: boolean
+}
+
+export type EsitoSbloccoPin =
+  | { esito: 'ok' }
+  | { esito: 'errato'; bloccatoFino: string | null }
+  | { esito: 'bloccato'; bloccatoFino: string }
+  | { esito: 'disattivato' }
+
+/** Credenziale per aprire un backup: master password oppure chiave di recupero. */
+export type CredenzialiRipristino = { password: string } | { chiaveRecupero: string }
 
 // ── Tipi di dominio ───────────────────────────────────────────────────────────
 
@@ -482,6 +518,8 @@ export interface BackupManifest {
   appVersion: string
   /** Percorso originale del file DB (per info). */
   dbPath: string
+  /** Slot della chiave di recupero valida al momento del backup (assente nei backup precedenti). */
+  recupero?: SlotSblocco
 }
 
 export interface BackupLocaleInfo {
@@ -531,6 +569,22 @@ export interface ElectronAPI {
     unlock: (password: string) => Promise<void>
     isOpen: () => Promise<boolean>
     changePassword: (oldPassword: string, newPassword: string) => Promise<void>
+    /** Sblocca con la chiave di recupero; poi lo stato diventa `recupero`. */
+    unlockRecupero: (chiave: string) => Promise<void>
+    unlockPin: (pin: string) => Promise<EsitoSbloccoPin>
+  }
+  recupero: {
+    /** Imposta la nuova master password dopo lo sblocco con chiave; restituisce la nuova chiave. */
+    completa: (nuovaPassword: string) => Promise<string>
+  }
+  sicurezza: {
+    stato: () => Promise<StatoSblocco>
+    /** Crea (o sostituisce) la chiave di recupero; restituisce la chiave formattata. */
+    generaChiaveRecupero: (password: string) => Promise<string>
+    /** Salva il testo in un .txt scelto dall'utente; false se annullato. */
+    salvaChiaveTxt: (contenuto: string) => Promise<boolean>
+    impostaPin: (password: string, pin: string) => Promise<void>
+    disattivaPin: () => Promise<void>
   }
   settings: {
     get: () => Promise<AppSettings>
@@ -633,7 +687,7 @@ export interface ElectronAPI {
     automatico: () => Promise<string>
     listLocale: () => Promise<BackupLocaleInfo[]>
     verifica: (args: { backupPath: string }) => Promise<BackupManifest>
-    ripristina: (args: { backupPath: string; password: string }) => Promise<void>
+    ripristina: (args: { backupPath: string } & CredenzialiRipristino) => Promise<void>
     reset: (args: { nuovaPassword: string }) => Promise<void>
     drive: {
       connect: () => Promise<void>
@@ -641,7 +695,7 @@ export interface ElectronAPI {
       isConnected: () => Promise<boolean>
       backup: (args: { backupPath: string }) => Promise<string>
       list: () => Promise<DriveBackupItem[]>
-      restore: (args: { fileId: string; password: string }) => Promise<void>
+      restore: (args: { fileId: string } & CredenzialiRipristino) => Promise<void>
     }
   }
   cf: {

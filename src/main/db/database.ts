@@ -178,16 +178,13 @@ export function openDatabaseWithKey(key: string): void {
 }
 
 /**
- * Cambia la master password senza perdere i dati (rekey SQLCipher in-place).
- * Verifica prima la vecchia password confrontando la chiave derivata con quella corrente.
- * @throws Error('PASSWORD_WRONG') se la vecchia password non corrisponde.
+ * Rekey SQLCipher in-place alla chiave derivata da `newPassword`, SENZA verificare la
+ * password attuale. Usata da `changePassword` e dal completamento del recupero con chiave
+ * (dove la vecchia password non è nota). Il chiamante è responsabile dell'autorizzazione.
  */
-export function changePassword(oldPassword: string, newPassword: string): void {
+export function rekeyDatabase(newPassword: string): void {
   if (dbInstance === null || currentKey === null) {
     throw new Error('Database non aperto. Eseguire prima openDatabase().')
-  }
-  if (deriveKey(oldPassword) !== currentKey) {
-    throw new Error('PASSWORD_WRONG')
   }
   const newKey = deriveKey(newPassword)
   // PRAGMA rekey non è supportato in WAL: si commuta in DELETE, si esegue il rekey,
@@ -200,4 +197,19 @@ export function changePassword(oldPassword: string, newPassword: string): void {
   }
   currentKey = newKey
   log.info('[database] Master password aggiornata (rekey)')
+}
+
+/**
+ * Cambia la master password senza perdere i dati (rekey SQLCipher in-place).
+ * Verifica prima la vecchia password confrontando la chiave derivata con quella corrente.
+ * @throws Error('PASSWORD_WRONG') se la vecchia password non corrisponde.
+ */
+export function changePassword(oldPassword: string, newPassword: string): void {
+  if (dbInstance === null || currentKey === null) {
+    throw new Error('Database non aperto. Eseguire prima openDatabase().')
+  }
+  if (deriveKey(oldPassword) !== currentKey) {
+    throw new Error('PASSWORD_WRONG')
+  }
+  rekeyDatabase(newPassword)
 }

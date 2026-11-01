@@ -8,7 +8,13 @@ import {
   closeDatabase,
   isDatabaseOpen,
 } from '../db/database'
-import type { BackupManifest } from './backup-service'
+import {
+  applicaDopoRipristino,
+  dbKeyDaChiave,
+  eliminaStatoSblocco
+} from '../sicurezza/sblocco-service'
+import { isSlotSblocco } from '../domain/sblocco'
+import type { BackupManifest, CredenzialiRipristino, SlotSblocco } from '../../types/shared'
 
 /**
  * Legge e verifica il manifest JSON accanto al file di backup.
@@ -51,13 +57,17 @@ export async function verificaBackup(backupPath: string): Promise<BackupManifest
 
 /**
  * Core del ripristino (senza verifica manifest): chiude il DB, fa una copia di
- * sicurezza, sovrascrive il DB con il file fornito e riapre con la password data.
+ * sicurezza, sovrascrive il DB con il file fornito e riapre con la password data
+ * oppure direttamente con la chiave SQLCipher (ottenuta dalla chiave di recupero).
  * Su fallimento ripristina la copia di sicurezza.
  *
  * @param backupPath - Percorso del file .db di backup
- * @param nuovaPassword - La master password con cui il backup è stato creato
+ * @param credenziale - La master password del backup oppure la sua chiave SQLCipher (hex 64)
  */
-export async function eseguiRipristino(backupPath: string, nuovaPassword: string): Promise<void> {
+export async function eseguiRipristino(
+  backupPath: string,
+  credenziale: { password: string } | { chiaveDb: string }
+): Promise<void> {
   // 2. Chiudi il DB corrente
   if (isDatabaseOpen()) {
     closeDatabase()
@@ -90,7 +100,8 @@ export async function eseguiRipristino(backupPath: string, nuovaPassword: string
 
   // 5. Tenta di aprire il DB con la password fornita
   try {
-    openDatabase(nuovaPassword)
+    if ('password' in credenziale) openDatabase(credenziale.password)
+    else openDatabaseWithKey(credenziale.chiaveDb)
     log.info('[restore] DB ripristinato e aperto con successo')
   } catch (err) {
     // 6. Se fallisce: ripristina il backup di sicurezza
@@ -127,18 +138,50 @@ export async function eseguiRipristino(backupPath: string, nuovaPassword: string
 }
 
 /**
- * Ripristina un backup nel DB corrente.
+ * Ripristina un file di backup con la master password o con la chiave di recupero.
+ *
+ * Con la chiave di recupero usa `slotBackup` (dal manifest o dai metadati Drive):
+ * `RECUPERO_NON_DISPONIBILE` se manca, `CHIAVE_ERRATA` (prima di toccare il DB) se non lo apre.
+ * Dopo un ripristino riuscito: PIN disattivato, contatore azzerato, slot di recupero corrente =
+ * quello del backup (o nessuno); con la chiave si entra nello stato di recupero.
+ *
+ * @param backupPath - Percorso del file .db di backup
+ * @param slotBackup - Slot di recupero salvato con il backup, se presente
+ * @param credenziali - `{ password }` oppure `{ chiaveRecupero }`
+ */
+export async function ripristinaConCredenziali(
+  backupPath: string,
+  slotBackup: SlotSblocco | null,
+  credenziali: CredenzialiRipristino
+): Promise<void> {
+  if ('chiaveRecupero' in credenziali) {
+    if (slotBackup === null) throw new Error('RECUPERO_NON_DISPONIBILE')
+    const chiaveDb = dbKeyDaChiave(slotBackup, credenziali.chiaveRecupero)
+    await eseguiRipristino(backupPath, { chiaveDb })
+    applicaDopoRipristino(slotBackup, true)
+  } else {
+    await eseguiRipristino(backupPath, { password: credenziali.password })
+    applicaDopoRipristino(slotBackup, false)
+  }
+}
+
+/**
+ * Ripristina un backup locale nel DB corrente.
  *
  * Operazione distruttiva: sovrascrive il DB attivo.
  * Prima di sovrascrivere, crea un backup di sicurezza del DB corrente.
- * Se l'apertura con la nuova password fallisce, ripristina il backup di sicurezza.
+ * Se l'apertura del backup fallisce, ripristina il backup di sicurezza.
  *
  * @param backupPath - Percorso del file .db di backup
- * @param nuovaPassword - La master password con cui il backup è stato creato
+ * @param credenziali - `{ password }` del backup oppure `{ chiaveRecupero }`
  */
-export async function ripristinaBackup(backupPath: string, nuovaPassword: string): Promise<void> {
-  await verificaBackup(backupPath)
-  await eseguiRipristino(backupPath, nuovaPassword)
+export async function ripristinaBackup(
+  backupPath: string,
+  credenziali: CredenzialiRipristino
+): Promise<void> {
+  const manifest = await verificaBackup(backupPath)
+  const slot = isSlotSblocco(manifest.recupero) ? manifest.recupero : null
+  await ripristinaConCredenziali(backupPath, slot, credenziali)
 }
 
 /**
@@ -146,6 +189,7 @@ export async function ripristinaBackup(backupPath: string, nuovaPassword: string
  *
  * Cancella tutti i dati, crea un nuovo DB con la nuova password.
  * Conforme a D6 (DECISIONS.md): il reset cancella i dati senza recupero possibile.
+ * Elimina anche `sblocco.json` (chiave di recupero e PIN del DB cancellato).
  *
  * ATTENZIONE: operazione irreversibile. Usare solo con doppia conferma dell'utente.
  *
@@ -169,7 +213,10 @@ export async function resetDatabase(nuovaPassword: string): Promise<void> {
     }
   }
 
-  // 3. Crea un nuovo DB con la nuova password (openDatabase lo crea da zero con migrazioni)
+  // 3. Chiave di recupero e PIN appartengono al DB cancellato
+  eliminaStatoSblocco()
+
+  // 4. Crea un nuovo DB con la nuova password (openDatabase lo crea da zero con migrazioni)
   openDatabase(nuovaPassword)
   log.info('[reset] Nuovo DB creato con nuova password e migrazioni applicate')
 }
