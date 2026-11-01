@@ -21,6 +21,7 @@ src/**/*.d.ts
 *.d.ts
 # Eccezione: file .d.ts mantenuti manualmente (non auto-generati)
 !src/renderer/src/types/api.d.ts
+!src/main/env.d.ts
 
 # Electron log files
 *.log
