@@ -221,7 +221,8 @@ export function dbKeyDaChiave(slot: SlotSblocco, chiave: string): string {
 
 /**
  * Apre il DB con la chiave di recupero e imposta `recuperoInCorso`.
- * @throws RECUPERO_NON_DISPONIBILE | CHIAVE_ERRATA | CHIAVE_NON_VALIDA | MIGRATION_FAILED: …
+ * @throws RECUPERO_NON_DISPONIBILE | CHIAVE_ERRATA | CHIAVE_NON_VALIDA | DB_APERTURA_FALLITA |
+ *   MIGRATION_FAILED: …
  */
 export function sbloccaConChiave(chiave: string): void {
   if (isDatabaseOpen()) throw new Error('DB_GIA_APERTO')
@@ -231,7 +232,10 @@ export function sbloccaConChiave(chiave: string): void {
   try {
     openDatabaseWithKey(dbKey)
   } catch (err) {
-    if (err instanceof Error && err.message === 'PASSWORD_WRONG') throw new Error('CHIAVE_NON_VALIDA')
+    // DB_APERTURA_FALLITA (problema dell'ambiente) e MIGRATION_FAILED passano invariati:
+    // lo slot di recupero resta valido e il recupero non risulta in corso.
+    if (err instanceof Error && err.message === 'PASSWORD_WRONG')
+      throw new Error('CHIAVE_NON_VALIDA')
     throw err
   }
   azzeraContatorePin()
@@ -323,6 +327,7 @@ export function disattivaPin(): void {
 /**
  * Sblocca il DB con il PIN. Un tentativo durante il blocco non viene contato.
  * @throws MIGRATION_FAILED: … se il DB si apre ma le migrazioni falliscono
+ * @throws DB_APERTURA_FALLITA se il DB non si apre per un problema tecnico (tentativo non contato)
  */
 export function sbloccaConPin(pin: string, ora: Date = new Date()): EsitoSbloccoPin {
   if (isDatabaseOpen()) throw new Error('DB_GIA_APERTO')
@@ -361,6 +366,10 @@ export function sbloccaConPin(pin: string, ora: Date = new Date()): EsitoSblocco
       log.warn('[sblocco] Il PIN non apre più il DB (slot superato): PIN disattivato')
       return { esito: 'disattivato' }
     }
+    // Problema dell'ambiente (es. modulo nativo per un altro ABI): il tentativo non conta,
+    // slot PIN, contatore e blocco restano invariati.
+    if (err instanceof Error && err.message === 'DB_APERTURA_FALLITA') throw err
+    // PIN corretto ma migrazioni fallite: il DB è aperto, il contatore si azzera.
     azzeraContatorePin()
     throw err
   }

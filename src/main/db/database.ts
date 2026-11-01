@@ -18,6 +18,22 @@ let dbInstance: Database.Database | null = null
 let currentKey: string | null = null
 
 /**
+ * Classifica un errore della fase 1 di apertura (apertura file + verifica chiave).
+ * Solo l'errore di SQLCipher per chiave errata (`SQLITE_NOTADB` / `file is not a database`)
+ * diventa `PASSWORD_WRONG`; ogni altro errore (es. modulo nativo compilato per un altro ABI,
+ * file non apribile) diventa `DB_APERTURA_FALLITA`, così non viene scambiato per credenziali errate.
+ */
+function erroreApertura(err: unknown): Error {
+  const code =
+    typeof err === 'object' && err !== null ? (err as { code?: unknown }).code : undefined
+  const message = err instanceof Error ? err.message : String(err)
+  if (code === 'SQLITE_NOTADB' || message.includes('file is not a database')) {
+    return new Error('PASSWORD_WRONG')
+  }
+  return new Error('DB_APERTURA_FALLITA')
+}
+
+/**
  * Deriva la chiave SQLCipher dalla master password usando PBKDF2.
  * Restituisce una stringa esadecimale di 64 caratteri (32 byte).
  * La chiave non viene mai scritta su disco.
@@ -39,7 +55,8 @@ export function checkFirstRun(): boolean {
  * Applica PRAGMA key per SQLCipher, verifica l'accesso leggendo user_version,
  * poi esegue le migrazioni in sospeso.
  *
- * Lancia Error('PASSWORD_WRONG') se la password non corrisponde.
+ * Lancia Error('PASSWORD_WRONG') se la password non corrisponde,
+ * Error('DB_APERTURA_FALLITA') per ogni altro errore di apertura.
  */
 export function openDatabase(password: string): void {
   if (dbInstance !== null) {
@@ -54,7 +71,7 @@ export function openDatabase(password: string): void {
 
   let db: Database.Database | null = null
 
-  // Fase 1: apertura e verifica chiave (errori qui → PASSWORD_WRONG)
+  // Fase 1: apertura e verifica chiave (errori qui → PASSWORD_WRONG o DB_APERTURA_FALLITA)
   try {
     db = new Database(dbPath)
     db.pragma(`key='${key}'`)
@@ -67,7 +84,7 @@ export function openDatabase(password: string): void {
     dbInstance = null
     const message = err instanceof Error ? err.message : String(err)
     log.error('[database] Errore apertura/verifica DB:', message)
-    throw new Error('PASSWORD_WRONG')
+    throw erroreApertura(err)
   }
 
   // Fase 2: migrazioni (errori qui → MIGRATION_FAILED, non PASSWORD_WRONG)
@@ -138,6 +155,7 @@ export function getCurrentKey(): string | null {
  * fase 2: WAL + foreign_keys + migrazioni).
  *
  * Lancia Error('PASSWORD_WRONG') se la chiave non corrisponde.
+ * Lancia Error('DB_APERTURA_FALLITA') per ogni altro errore di apertura.
  * Lancia Error('MIGRATION_FAILED: …') se le migrazioni falliscono.
  */
 export function openDatabaseWithKey(key: string): void {
@@ -149,7 +167,7 @@ export function openDatabaseWithKey(key: string): void {
   const dbPath = DB_PATH
   let db: Database.Database | null = null
 
-  // Fase 1: apertura e verifica chiave (errori qui → PASSWORD_WRONG)
+  // Fase 1: apertura e verifica chiave (errori qui → PASSWORD_WRONG o DB_APERTURA_FALLITA)
   try {
     db = new Database(dbPath)
     db.pragma(`key='${key}'`)
@@ -161,7 +179,7 @@ export function openDatabaseWithKey(key: string): void {
     if (db && db.open) db.close()
     const message = err instanceof Error ? err.message : String(err)
     log.error('[database] Errore apertura/verifica DB (openDatabaseWithKey):', message)
-    throw new Error('PASSWORD_WRONG')
+    throw erroreApertura(err)
   }
 
   // Fase 2: migrazioni (errori qui → MIGRATION_FAILED)
