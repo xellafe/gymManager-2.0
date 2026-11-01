@@ -10,6 +10,9 @@
 - Le asserzioni sul CSS della ricevuta devono coprire ogni valore elencato nella tabella dello spec, non un campione — altrimenti una regressione su regole non campionate (h2, note, separatore) passa inosservata.
 - Nei test dei moduli del main che usano più cartelle di sistema, il mock di `app.getPath` deve distinguere il nome (es. `'downloads'` diverso da `'userData'`) — un mock che restituisce sempre lo stesso percorso fa coincidere Download e userData e il ripiego su Download non viene davvero verificato (`tests/unit/cartella-ricevute.test.ts`).
 - Ogni file `.d.ts` scritto a mano va aggiunto come eccezione `!percorso` in `.gitignore` e verificato con `git ls-files` — `.gitignore` ignora `*.d.ts` e `src/**/*.d.ts`: `src/main/env.d.ts` era rimasto fuori dai commit e il typecheck passava solo in locale.
+- `BackupManifest` va definito una sola volta in `src/types/shared.ts` e importato dal main — era duplicato in `src/main/backup/backup-service.ts` e `src/types/shared.ts`, e un campo aggiunto a una sola copia fa divergere manifest scritto e tipo letto dal renderer.
+- Negli e2e Playwright non usare `locator.isVisible({ timeout })` per aspettare un elemento (il timeout è ignorato): usare `expect(locator).toBeVisible()` o `locator.waitFor()` — `tests/e2e/critical-flow.spec.ts` poteva controllare l'invito prima che comparisse.
+- Anche i `placeholder` degli input vanno in i18n come le altre stringhe UI — in `Unlock.tsx` e `CredenzialeRipristino.tsx` il formato chiave era hardcoded.
 
 ## Patterns
 - Nuova operazione esposta al renderer: handler `ipcMain.handle('<area>:<azione>')` in `src/main/ipc/handlers.ts` → metodo in `src/preload/index.ts` → tipo in `ElectronAPI` di `src/types/shared.ts`, non in `api.d.ts` (es. `clienti:count`): `api.d.ts` contiene solo l'aggancio a `Window` e duplicarvi i tipi li farebbe divergere.
@@ -20,6 +23,10 @@
 - Un file del repo da includere nell'app (es. `CHANGELOG.md`) si importa con `?raw` dal codice che lo usa, con una `declare module` per il tsconfig del main (`src/main/env.d.ts`) — evita di toccare `extraResources` di electron-builder e percorsi diversi tra dev e app pacchettizzata.
 - I test dei moduli del main che dipendono da `checkFirstRun` mockano `src/main/db/database` con `vi.hoisted` per lo stato (`tests/unit/changelog-service.test.ts`) — evita di aprire un DB reale e di toccare `DB_PATH`.
 - I nuovi handler IPC che scrivono in `settings.json` ricavano il valore nel main e non lo ricevono dal renderer (es. `changelog:markSeen` salva `app.getVersion()`) — `settings:set` fa il merge di chiavi arbitrarie; così un renderer compromesso non altera lo stato locale riservato al main.
+- Per testare un handler IPC: mockare `ipcMain.handle` in modo che salvi gli handler in una `Map` (con `vi.hoisted`), chiamare `registerIpcHandlers()` e invocare l'handler dalla mappa, mockando `pdf/generator`, `updater/auto-updater`, `backup/backup-scheduler` e `sync/sync-service` (es. `tests/unit/sblocco-service.test.ts`) — senza, `db:unlock` e `db:changePassword` restavano fuori dai test.
+- Una modale che non deve chiudersi con Esc o clic fuori si ottiene con un'opzione di `ui/Modal`, senza riscriverla — `ChiaveRecuperoModal` duplicava overlay e pannello di `Modal` e perdeva il focus trap.
+- Uno slot di sblocco importato da una fonte esterna (manifest, `description` Drive) diventa corrente solo se `kekCifrata` si decifra con la `dbKey` del DB aperto — `applicaDopoRipristino` (`src/main/backup/restore-service.ts`) accettava lo slot senza verificarlo, e uno slot estraneo verrebbe poi ricifrato a ogni cambio password.
+- Pulsanti e input condivisi vanno in `components/ui/` o in un unico modulo di classi — `components/sicurezza/pin.ts` e `pages/Unlock.tsx` duplicavano le stesse stringhe Tailwind.
 
 ## Reusable code
 - Importi, date e numero ricevuta (main/PDF): `src/main/domain/ricevuta-format.ts` (`formatImporto`, `formatDataIT`, `formatNumeroRicevuta`).
