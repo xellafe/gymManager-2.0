@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config'
 import { resolve } from 'path'
 
 export default defineConfig({
+  esbuild: { jsx: 'automatic' },
   define: {
     // Stessa sostituzione usata da electron-vite; in test sono stringhe vuote
     // salvo che la variabile d'ambiente sia impostata manualmente.

@@ -17,6 +17,7 @@ import type { ElectronApplication } from './helpers/electron-app'
 /**
  * Helper: sblocca l'app inserendo la master password.
  * Presuppone che il DB esista e la pagina Unlock sia visibile.
+ * Se il DB non ha la chiave di recupero compare l'invito: si preme "Più tardi".
  */
 async function unlockApp(
   window: Awaited<ReturnType<ElectronApplication['firstWindow']>>,
@@ -25,6 +26,10 @@ async function unlockApp(
   await window.locator('[data-testid="password-input"]').fill(password)
   await window.locator('[data-testid="unlock-submit"]').click()
   await expect(window.locator('[data-testid="dashboard"]')).toBeVisible({ timeout: 10000 })
+  const piuTardi = window.locator('[data-testid="invito-chiave-dopo"]')
+  if (await piuTardi.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await piuTardi.click()
+  }
 }
 
 test.describe('Flusso critico: crea cliente → iscrizione → abbonamento → ricevuta → backup', () => {

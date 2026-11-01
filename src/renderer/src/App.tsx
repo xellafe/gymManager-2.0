@@ -4,11 +4,12 @@ import i18n from './i18n'
 import { applyTheme, applyPrimaryColor } from './theme'
 import SetupPage from './pages/Setup'
 import UnlockPage from './pages/Unlock'
+import NuovaPasswordRecuperoPage from './pages/NuovaPasswordRecupero'
 import ShellPage from './pages/Shell'
 import SyncBanner from './components/sync/SyncBanner'
 import SyncConflictDialog from './components/sync/SyncConflictDialog'
 
-type AppState = 'loading' | 'firstRun' | 'locked' | 'ready'
+type AppState = 'loading' | 'firstRun' | 'locked' | 'ready' | 'recupero'
 
 export default function App(): React.JSX.Element {
   const { t } = useTranslation()
@@ -31,6 +32,16 @@ export default function App(): React.JSX.Element {
     if (pollingTimerRef.current !== null) {
       clearInterval(pollingTimerRef.current)
       pollingTimerRef.current = null
+    }
+  }
+
+  /** Rilegge lo stato del DB (dopo setup, sblocco o recupero). */
+  async function rileggiStato(): Promise<void> {
+    try {
+      const { state } = await window.api.db.getState()
+      setAppState(state)
+    } catch {
+      setAppState('locked')
     }
   }
 
@@ -134,11 +145,15 @@ export default function App(): React.JSX.Element {
   }
 
   if (appState === 'firstRun') {
-    return <SetupPage onReady={() => setAppState('ready')} />
+    return <SetupPage onReady={() => void rileggiStato()} />
   }
 
   if (appState === 'locked') {
-    return <UnlockPage onReady={() => setAppState('ready')} />
+    return <UnlockPage onReady={() => void rileggiStato()} />
+  }
+
+  if (appState === 'recupero') {
+    return <NuovaPasswordRecuperoPage onReady={() => void rileggiStato()} />
   }
 
   return (

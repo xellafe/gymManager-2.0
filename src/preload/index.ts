@@ -42,7 +42,10 @@ import type {
   UpdateInfo,
   UpdateProgress,
   SyncStatus,
-  VoceChangelog
+  VoceChangelog,
+  CredenzialiRipristino,
+  EsitoSbloccoPin,
+  StatoSblocco
 } from '../types/shared'
 
 // Espone le API standard di electron-toolkit su window.electron
@@ -69,6 +72,36 @@ const api: ElectronAPI = {
     },
     changePassword(oldPassword: string, newPassword: string): Promise<void> {
       return ipcRenderer.invoke('db:changePassword', { oldPassword, newPassword })
+    },
+    unlockRecupero(chiave: string): Promise<void> {
+      return ipcRenderer.invoke('db:unlockRecupero', { chiave })
+    },
+    unlockPin(pin: string): Promise<EsitoSbloccoPin> {
+      return ipcRenderer.invoke('db:unlockPin', { pin })
+    }
+  },
+
+  recupero: {
+    completa(nuovaPassword: string): Promise<string> {
+      return ipcRenderer.invoke('recupero:completa', { nuovaPassword })
+    }
+  },
+
+  sicurezza: {
+    stato(): Promise<StatoSblocco> {
+      return ipcRenderer.invoke('sicurezza:stato')
+    },
+    generaChiaveRecupero(password: string): Promise<string> {
+      return ipcRenderer.invoke('sicurezza:generaChiaveRecupero', { password })
+    },
+    salvaChiaveTxt(contenuto: string): Promise<boolean> {
+      return ipcRenderer.invoke('sicurezza:salvaChiaveTxt', { contenuto })
+    },
+    impostaPin(password: string, pin: string): Promise<void> {
+      return ipcRenderer.invoke('sicurezza:impostaPin', { password, pin })
+    },
+    disattivaPin(): Promise<void> {
+      return ipcRenderer.invoke('sicurezza:disattivaPin')
     }
   },
 
@@ -283,7 +316,7 @@ const api: ElectronAPI = {
     verifica(args: { backupPath: string }): Promise<BackupManifest> {
       return ipcRenderer.invoke('backup:verifica', args)
     },
-    ripristina(args: { backupPath: string; password: string }): Promise<void> {
+    ripristina(args: { backupPath: string } & CredenzialiRipristino): Promise<void> {
       return ipcRenderer.invoke('backup:ripristina', args)
     },
     reset(args: { nuovaPassword: string }): Promise<void> {
@@ -305,7 +338,7 @@ const api: ElectronAPI = {
       list(): Promise<DriveBackupItem[]> {
         return ipcRenderer.invoke('backup:drive:list')
       },
-      restore(args: { fileId: string; password: string }): Promise<void> {
+      restore(args: { fileId: string } & CredenzialiRipristino): Promise<void> {
         return ipcRenderer.invoke('backup:drive:restore', args)
       }
     }
@@ -450,5 +483,8 @@ export type {
   DriveBackupItem,
   UpdateInfo,
   UpdateProgress,
-  SyncStatus
+  SyncStatus,
+  CredenzialiRipristino,
+  EsitoSbloccoPin,
+  StatoSblocco
 }

@@ -9,6 +9,7 @@ import SettingsPage from './SettingsPage'
 import UpdateNotification from '../components/updater/UpdateNotification'
 import UpdateCheckSnackbar from '../components/updater/UpdateCheckSnackbar'
 import ChangelogModal from '../components/ChangelogModal'
+import GeneraChiaveDialog from '../components/sicurezza/GeneraChiaveDialog'
 import type { ClientiFilters, VoceChangelog } from '../../../types/shared'
 
 type NavItem = 'dashboard' | 'clients' | 'catalog' | 'receipts' | 'settings'
@@ -121,6 +122,9 @@ export default function ShellPage(): React.JSX.Element {
   const [receiptsFilter, setReceiptsFilter] = useState<ReceiptsFilter | undefined>(undefined)
   const [novita, setNovita] = useState<VoceChangelog[]>([])
   const [novitaAperte, setNovitaAperte] = useState(false)
+  const [novitaCaricate, setNovitaCaricate] = useState(false)
+  const [invitoNecessario, setInvitoNecessario] = useState(false)
+  const [invitoChiuso, setInvitoChiuso] = useState(false)
 
   // Novità non ancora viste: errori ignorati (nessun modale, riproverà al prossimo avvio)
   useEffect(() => {
@@ -132,6 +136,15 @@ export default function ShellPage(): React.JSX.Element {
           setNovitaAperte(true)
         }
       })
+      .catch(() => {})
+      .finally(() => setNovitaCaricate(true))
+  }, [])
+
+  // Invito a generare la chiave di recupero: a ogni montaggio finché non esiste
+  useEffect(() => {
+    void window.api.sicurezza
+      .stato()
+      .then((st) => setInvitoNecessario(!st.recuperoAttivo))
       .catch(() => {})
   }, [])
 
@@ -259,6 +272,11 @@ export default function ShellPage(): React.JSX.Element {
       <UpdateNotification />
       <UpdateCheckSnackbar />
       <ChangelogModal isOpen={novitaAperte} voci={novita} onClose={chiudiNovita} />
+      <GeneraChiaveDialog
+        isOpen={invitoNecessario && !invitoChiuso && novitaCaricate && !novitaAperte}
+        variante="invito"
+        onClose={() => setInvitoChiuso(true)}
+      />
     </div>
     </SettingsProvider>
   )

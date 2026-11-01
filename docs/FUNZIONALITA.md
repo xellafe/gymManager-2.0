@@ -55,7 +55,7 @@ Aree:
 - **Scadenze**: intervalli di segnalazione **distinti** per certificati medici, iscrizioni e abbonamenti.
 - **Backup**: percorso locale; frequenza automatica configurabile (default: a ogni chiusura dell'app) + backup manuale on-demand; collegamento a Google Drive (connetti/disconnetti).
 - **Lingua**: selezione lingua UI (IT di default).
-- **Sicurezza**: cambio master password; reset con avviso di perdita dati.
+- **Sicurezza**: cambio master password; **chiave di recupero** (24 caratteri, mostrata al primo avvio, rigenerabile da Impostazioni, con "Copia" e salvataggio in `.txt`) per sbloccare i dati e scegliere una nuova password se la si dimentica, valida anche per ripristinare i backup (locali e Drive) creati da ora in poi; **PIN di sblocco** facoltativo di 6 lettere o cifre, solo su questo PC, con blocco temporaneo dopo 5 errori e disattivazione al 10°; reset con avviso di perdita dati come ultima risorsa.
 
 ## Ricevute
 

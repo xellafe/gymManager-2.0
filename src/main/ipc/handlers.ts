@@ -9,19 +9,40 @@ import {
 } from '../changelog/changelog-service'
 import { backupLocale, backupAutomatico, listBackupLocali } from '../backup/backup-service'
 import { initBackupScheduler, restartBackupScheduler } from '../backup/backup-scheduler'
-import { verificaBackup, ripristinaBackup, resetDatabase, eseguiRipristino } from '../backup/restore-service'
+import {
+  verificaBackup,
+  ripristinaBackup,
+  resetDatabase,
+  ripristinaConCredenziali
+} from '../backup/restore-service'
 import {
   connectDrive,
   isDriveConnected,
   disconnectDrive,
   backupSuDrive,
   listBackupDrive,
-  ripristinaDaDrive
+  ripristinaDaDrive,
+  leggiSlotBackupDrive
 } from '../backup/drive-service'
+import {
+  azzeraContatorePin,
+  completaRecupero,
+  disattivaPin,
+  generaChiaveRecupero,
+  impostaPin,
+  isRecuperoInCorso,
+  ricifraSlotDopoCambioPassword,
+  sbloccaConChiave,
+  sbloccaConPin,
+  statoSblocco
+} from '../sicurezza/sblocco-service'
 import type {
   BackupManifest,
   BackupLocaleInfo,
+  CredenzialiRipristino,
   DriveBackupItem,
+  EsitoSbloccoPin,
+  StatoSblocco,
   SyncStatus,
   VoceChangelog
 } from '../../types/shared'
@@ -40,7 +61,13 @@ import { generaPDFInElectron } from '../pdf/generator'
 import { getDatabase } from '../db/database'
 import type { ImpostazioniAttivitaSnapshot } from '../domain/ricevuta'
 import log from 'electron-log'
-import { checkFirstRun, openDatabase, isDatabaseOpen, changePassword } from '../db/database'
+import {
+  checkFirstRun,
+  openDatabase,
+  isDatabaseOpen,
+  changePassword,
+  getCurrentKey
+} from '../db/database'
 import { loadSettings, saveSettings, applyAppSettingsToDb } from '../settings/store'
 import {
   createCliente,
@@ -141,6 +168,35 @@ import type {
 } from '../../types/shared'
 
 /**
+ * Passi comuni dopo l'apertura del DB (password, PIN, chiave di recupero):
+ * stati iscrizioni/abbonamenti, verifica sync non bloccante, scheduler dei backup.
+ */
+function dopoSblocco(): void {
+  aggiornaStatoIscrizioni()
+  aggiornaStatoAbbonamenti()
+  // Verifica sync non bloccante: non deve ritardare la risposta dell'unlock.
+  void syncOnOpen().catch((err) => log.warn('[sync] open check fallito:', err))
+  initBackupScheduler()
+}
+
+/** Normalizza l'errore di migrazione fallita per il renderer, altrimenti lo rilancia. */
+function rilanciaErroreSblocco(err: unknown, fallback: string): never {
+  if (err instanceof Error && err.message.startsWith('MIGRATION_FAILED')) {
+    // Migrazione fallita post-aggiornamento: DB aperto ma schema non aggiornato.
+    // L'utente deve ripristinare da un backup o contattare il supporto.
+    throw new Error('MIGRATION_FAILED')
+  }
+  throw err instanceof Error ? err : new Error(fallback)
+}
+
+/** Valida le credenziali di ripristino ricevute dal renderer. */
+function credenzialiDa(args: { password?: unknown; chiaveRecupero?: unknown }): CredenzialiRipristino {
+  if (typeof args.chiaveRecupero === 'string') return { chiaveRecupero: args.chiaveRecupero }
+  if (typeof args.password === 'string') return { password: args.password }
+  throw new Error('VALIDATION_ERROR: credenziali mancanti')
+}
+
+/**
  * Registra tutti gli handler IPC dell'applicazione.
  * Deve essere chiamata prima della creazione della finestra principale.
  */
@@ -152,11 +208,12 @@ export function registerIpcHandlers(): void {
    * - 'firstRun': nessun DB su disco (primo avvio)
    * - 'locked': DB esiste ma non è stato sbloccato
    * - 'ready': DB aperto e pronto
+   * - 'recupero': DB aperto con la chiave di recupero, manca la nuova master password
    */
   ipcMain.handle('db:getState', (): { state: DbState } => {
     try {
       if (isDatabaseOpen()) {
-        return { state: 'ready' }
+        return { state: isRecuperoInCorso() ? 'recupero' : 'ready' }
       }
       if (checkFirstRun()) {
         return { state: 'firstRun' }
@@ -200,24 +257,73 @@ export function registerIpcHandlers(): void {
         if (!password || password.trim().length === 0) {
           throw new Error('La password non può essere vuota')
         }
-        openDatabase(password)
-        aggiornaStatoIscrizioni()
-        aggiornaStatoAbbonamenti()
+        try {
+          openDatabase(password)
+        } catch (err) {
+          // Password corretta anche se le migrazioni falliscono: azzera il contatore PIN
+          if (err instanceof Error && err.message.startsWith('MIGRATION_FAILED')) azzeraContatorePin()
+          throw err
+        }
+        azzeraContatorePin()
+        dopoSblocco()
         log.info('[ipc] db:unlock completato')
-        // Verifica sync non bloccante: non deve ritardare la risposta dell'unlock.
-        void syncOnOpen().catch((err) => log.warn('[sync] open check fallito:', err))
-        initBackupScheduler()
       } catch (err) {
         log.error('[ipc] db:unlock errore:', err)
         if (err instanceof Error && err.message === 'PASSWORD_WRONG') {
           throw new Error('Password errata. Riprova.')
         }
-        if (err instanceof Error && err.message.startsWith('MIGRATION_FAILED')) {
-          // Migrazione fallita post-aggiornamento: DB aperto ma schema non aggiornato.
-          // L'utente deve ripristinare da un backup o contattare il supporto.
-          throw new Error('MIGRATION_FAILED')
+        rilanciaErroreSblocco(err, 'Errore durante lo sblocco del database')
+      }
+    }
+  )
+
+  /**
+   * Sblocco con la chiave di recupero: apre il DB e passa allo stato `recupero`
+   * (la nuova master password si imposta con `recupero:completa`).
+   */
+  ipcMain.handle(
+    'db:unlockRecupero',
+    async (_event, { chiave }: { chiave: string }): Promise<void> => {
+      try {
+        sbloccaConChiave(typeof chiave === 'string' ? chiave : '')
+        dopoSblocco()
+        log.info('[ipc] db:unlockRecupero completato')
+      } catch (err) {
+        log.error('[ipc] db:unlockRecupero errore:', err)
+        rilanciaErroreSblocco(err, 'Errore durante lo sblocco con la chiave di recupero')
+      }
+    }
+  )
+
+  /** Sblocco con il PIN (blocco temporaneo dopo 5 errori, disattivazione al 10°). */
+  ipcMain.handle(
+    'db:unlockPin',
+    async (_event, { pin }: { pin: string }): Promise<EsitoSbloccoPin> => {
+      try {
+        const esito = sbloccaConPin(typeof pin === 'string' ? pin : '')
+        if (esito.esito === 'ok') {
+          dopoSblocco()
+          log.info('[ipc] db:unlockPin completato')
         }
-        throw err instanceof Error ? err : new Error('Errore durante lo sblocco del database')
+        return esito
+      } catch (err) {
+        log.error('[ipc] db:unlockPin errore:', err)
+        rilanciaErroreSblocco(err, 'Errore durante lo sblocco con il PIN')
+      }
+    }
+  )
+
+  /** Nuova master password dopo lo sblocco con chiave; restituisce la nuova chiave di recupero. */
+  ipcMain.handle(
+    'recupero:completa',
+    async (_event, { nuovaPassword }: { nuovaPassword: string }): Promise<string> => {
+      try {
+        const chiave = completaRecupero(typeof nuovaPassword === 'string' ? nuovaPassword : '')
+        log.info('[ipc] recupero:completa completato')
+        return chiave
+      } catch (err) {
+        log.error('[ipc] recupero:completa errore:', err)
+        throw err instanceof Error ? err : new Error('Errore durante il recupero')
       }
     }
   )
@@ -232,8 +338,19 @@ export function registerIpcHandlers(): void {
         if (!newPassword || newPassword.length < 8) {
           throw new Error('VALIDATION_ERROR: newPassword: minimo 8 caratteri')
         }
+        const vecchiaKey = getCurrentKey()
         changePassword(oldPassword, newPassword)
         log.info('[ipc] db:changePassword completato')
+        // Chiave di recupero e PIN restano validi: si ricifrano per la nuova chiave del DB.
+        // Un errore qui non annulla il cambio password.
+        const nuovaKey = getCurrentKey()
+        if (vecchiaKey !== null && nuovaKey !== null) {
+          try {
+            ricifraSlotDopoCambioPassword(vecchiaKey, nuovaKey)
+          } catch (err) {
+            log.error('[ipc] db:changePassword: ricifratura slot di sblocco fallita:', err)
+          }
+        }
       } catch (err) {
         log.error('[ipc] db:changePassword errore:', err)
         if (err instanceof Error && err.message === 'PASSWORD_WRONG') {
@@ -249,6 +366,77 @@ export function registerIpcHandlers(): void {
    */
   ipcMain.handle('db:isOpen', (): boolean => {
     return isDatabaseOpen()
+  })
+
+  // ── Sicurezza (chiave di recupero, PIN) ──────────────────────────────────
+
+  ipcMain.handle('sicurezza:stato', (): StatoSblocco => {
+    try {
+      return statoSblocco()
+    } catch (err) {
+      log.error('[ipc] sicurezza:stato errore:', err)
+      throw err instanceof Error ? err : new Error('Errore nella lettura dello stato di sblocco')
+    }
+  })
+
+  /** Crea o sostituisce la chiave di recupero (la precedente smette di valere). */
+  ipcMain.handle(
+    'sicurezza:generaChiaveRecupero',
+    async (_event, { password }: { password: string }): Promise<string> => {
+      try {
+        return generaChiaveRecupero(typeof password === 'string' ? password : '')
+      } catch (err) {
+        log.error('[ipc] sicurezza:generaChiaveRecupero errore:', err)
+        throw err instanceof Error ? err : new Error('Errore nella generazione della chiave')
+      }
+    }
+  )
+
+  /** Salva la chiave (testo composto dal renderer) in un .txt scelto dall'utente. */
+  ipcMain.handle(
+    'sicurezza:salvaChiaveTxt',
+    async (event, { contenuto }: { contenuto: string }): Promise<boolean> => {
+      try {
+        const win = BrowserWindow.fromWebContents(event.sender)
+        const opzioni: Electron.SaveDialogOptions = {
+          defaultPath: 'gymmanager-chiave-recupero.txt',
+          filters: [{ name: 'Testo', extensions: ['txt'] }]
+        }
+        const result = win
+          ? await dialog.showSaveDialog(win, opzioni)
+          : await dialog.showSaveDialog(opzioni)
+        if (result.canceled || !result.filePath) return false
+        writeFileSync(result.filePath, String(contenuto), 'utf-8')
+        return true
+      } catch (err) {
+        log.error('[ipc] sicurezza:salvaChiaveTxt errore:', err)
+        throw err instanceof Error ? err : new Error('Errore nel salvataggio della chiave')
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'sicurezza:impostaPin',
+    async (_event, { password, pin }: { password: string; pin: string }): Promise<void> => {
+      try {
+        impostaPin(
+          typeof password === 'string' ? password : '',
+          typeof pin === 'string' ? pin : ''
+        )
+      } catch (err) {
+        log.error('[ipc] sicurezza:impostaPin errore:', err)
+        throw err instanceof Error ? err : new Error("Errore nell'impostazione del PIN")
+      }
+    }
+  )
+
+  ipcMain.handle('sicurezza:disattivaPin', (): void => {
+    try {
+      disattivaPin()
+    } catch (err) {
+      log.error('[ipc] sicurezza:disattivaPin errore:', err)
+      throw err instanceof Error ? err : new Error('Errore nella disattivazione del PIN')
+    }
   })
 
   // ── Impostazioni ─────────────────────────────────────────────────────────
@@ -1053,10 +1241,10 @@ export function registerIpcHandlers(): void {
     'backup:ripristina',
     async (
       _event,
-      { backupPath, password }: { backupPath: string; password: string }
+      args: { backupPath: string; password?: string; chiaveRecupero?: string }
     ): Promise<void> => {
       try {
-        await ripristinaBackup(backupPath, password)
+        await ripristinaBackup(args.backupPath, credenzialiDa(args))
       } catch (err) {
         log.error('[ipc] backup:ripristina errore:', err)
         throw err instanceof Error ? err : new Error('Errore durante il ripristino del backup')
@@ -1208,12 +1396,18 @@ export function registerIpcHandlers(): void {
     'backup:drive:restore',
     async (
       _event,
-      { fileId, password }: { fileId: string; password: string }
+      args: { fileId: string; password?: string; chiaveRecupero?: string }
     ): Promise<void> => {
       const tempPath = join(app.getPath('userData'), `drive-restore-${Date.now()}.db`)
       try {
-        await ripristinaDaDrive(fileId, tempPath)
-        await eseguiRipristino(tempPath, password)
+        const credenziali = credenzialiDa(args)
+        const slot = await leggiSlotBackupDrive(args.fileId)
+        // Senza slot la chiave non può aprire il backup: errore prima di scaricarlo
+        if ('chiaveRecupero' in credenziali && slot === null) {
+          throw new Error('RECUPERO_NON_DISPONIBILE')
+        }
+        await ripristinaDaDrive(args.fileId, tempPath)
+        await ripristinaConCredenziali(tempPath, slot, credenziali)
       } catch (err) {
         log.error('[ipc] backup:drive:restore errore:', err)
         throw err instanceof Error ? err : new Error('Errore durante il ripristino da Drive')

@@ -19,7 +19,8 @@ import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs'
 import log from 'electron-log'
-import type { DriveBackupItem } from '../../types/shared'
+import { isSlotSblocco } from '../domain/sblocco'
+import type { BackupManifest, DriveBackupItem, SlotSblocco } from '../../types/shared'
 
 // Costanti iniettate da Vite define al momento del build.
 // In sviluppo locale si impostano tramite variabili d'ambiente GOOGLE_CLIENT_ID
@@ -367,16 +368,24 @@ export async function uploadConflictCopy(dbPath: string): Promise<string> {
 
 /**
  * Helper interno: carica un file su Drive con un nome specificato, nella cartella app.
- * Ritorna il fileId.
+ * `description` (facoltativa) finisce nei metadati del file. Ritorna il fileId.
  */
-async function backupSuDriveConNome(backupPath: string, fileName: string): Promise<string> {
+async function backupSuDriveConNome(
+  backupPath: string,
+  fileName: string,
+  description?: string
+): Promise<string> {
   const accessToken = await getValidToken()
   const folderId = await getOrCreateFolder(accessToken)
 
   const fileContent = readFileSync(backupPath)
   const boundary = 'gymmanager_drive_boundary_314159'
 
-  const metadataJson = JSON.stringify({ name: fileName, parents: [folderId] })
+  const metadataJson = JSON.stringify({
+    name: fileName,
+    parents: [folderId],
+    ...(description !== undefined ? { description } : {})
+  })
 
   const bodyParts = [
     `--${boundary}\r\n`,
@@ -410,13 +419,33 @@ async function backupSuDriveConNome(backupPath: string, fileName: string): Promi
   return data.id
 }
 
+/** Slot di recupero dal manifest accanto al backup, se presente e leggibile. */
+function leggiSlotDaManifest(backupPath: string): SlotSblocco | null {
+  const manifestPath = backupPath + '.manifest.json'
+  if (!existsSync(manifestPath)) return null
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as Partial<BackupManifest>
+    return isSlotSblocco(manifest.recupero) ? manifest.recupero : null
+  } catch (err) {
+    log.warn('[drive] Manifest del backup illeggibile:', err)
+    return null
+  }
+}
+
 /**
  * Carica un file di backup su Google Drive nella cartella "GymManager Backup".
+ * Se il manifest accanto al file contiene lo slot della chiave di recupero, lo salva
+ * (JSON) nel campo `description` del file Drive, per il ripristino con la chiave.
  * @returns ID del file su Google Drive
  */
 export async function backupSuDrive(backupPath: string): Promise<string> {
   const fileName = `gymmanager_backup_${new Date().toISOString().replace(/[:.]/g, '-')}.db`
-  const fileId = await backupSuDriveConNome(backupPath, fileName)
+  const slot = leggiSlotDaManifest(backupPath)
+  const fileId = await backupSuDriveConNome(
+    backupPath,
+    fileName,
+    slot !== null ? JSON.stringify(slot) : undefined
+  )
   log.info(`[drive] Backup caricato su Drive: ${fileId} (${fileName})`)
   return fileId
 }
@@ -435,6 +464,26 @@ export async function ripristinaDaDrive(fileId: string, destinazionePath: string
   const buffer = Buffer.from(await res.arrayBuffer())
   writeFileSync(destinazionePath, buffer)
   log.info(`[drive] File ripristinato da Drive: ${fileId} → ${destinazionePath}`)
+}
+
+/**
+ * Legge lo slot della chiave di recupero dal campo `description` di un backup su Drive.
+ * @returns lo slot, o `null` se il backup non lo contiene (backup precedenti)
+ */
+export async function leggiSlotBackupDrive(fileId: string): Promise<SlotSblocco | null> {
+  const accessToken = await getValidToken()
+  const res = await fetch(`${GOOGLE_DRIVE_API}/files/${fileId}?fields=description`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  })
+  if (!res.ok) throw new Error(`DRIVE_META_FAILED: ${await res.text()}`)
+  const data = (await res.json()) as { description?: string }
+  if (!data.description) return null
+  try {
+    const slot: unknown = JSON.parse(data.description)
+    return isSlotSblocco(slot) ? slot : null
+  } catch {
+    return null
+  }
 }
 
 /**

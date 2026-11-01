@@ -1,6 +1,12 @@
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Modal from '../ui/Modal'
+import {
+  CredenzialeRipristinoCampi,
+  costruisciCredenziali,
+  erroreChiaveRipristino,
+  type ModoCredenziale
+} from '../sicurezza/CredenzialeRipristino'
 
 interface RestoreDialogProps {
   isOpen: boolean
@@ -11,7 +17,9 @@ export default function RestoreDialog({ isOpen, onClose }: RestoreDialogProps): 
   const { t } = useTranslation()
 
   const [backupPath, setBackupPath] = useState('')
+  const [modo, setModo] = useState<ModoCredenziale>('password')
   const [password, setPassword] = useState('')
+  const [chiave, setChiave] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -19,7 +27,9 @@ export default function RestoreDialog({ isOpen, onClose }: RestoreDialogProps): 
   function handleClose(): void {
     if (isLoading) return
     setBackupPath('')
+    setModo('password')
     setPassword('')
+    setChiave('')
     setError(null)
     setSuccess(false)
     onClose()
@@ -47,14 +57,19 @@ export default function RestoreDialog({ isOpen, onClose }: RestoreDialogProps): 
       setError(t('backup.ripristina_percorso_obbligatorio'))
       return
     }
-    if (!password) {
-      setError(t('backup.ripristina_password_obbligatoria'))
+    const credenziali = costruisciCredenziali(modo, password, chiave)
+    if (credenziali === null) {
+      setError(
+        modo === 'password'
+          ? t('backup.ripristina_password_obbligatoria')
+          : t('backup.ripristina_chiave_obbligatoria')
+      )
       return
     }
 
     setIsLoading(true)
     try {
-      await window.api.backup.ripristina({ backupPath: backupPath.trim(), password })
+      await window.api.backup.ripristina({ backupPath: backupPath.trim(), ...credenziali })
       setSuccess(true)
       setTimeout(() => {
         if ('restart' in window.api.app) {
@@ -65,8 +80,11 @@ export default function RestoreDialog({ isOpen, onClose }: RestoreDialogProps): 
       }, 2000)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
+      const chiaveKey = erroreChiaveRipristino(err)
       if (message.includes('DRIVE_NOT_CONFIGURED')) {
         setError(t('backup.drive_non_configurato'))
+      } else if (chiaveKey !== null) {
+        setError(t(chiaveKey))
       } else {
         setError(t('backup.ripristina_errore'))
       }
@@ -125,24 +143,17 @@ export default function RestoreDialog({ isOpen, onClose }: RestoreDialogProps): 
               </div>
             </div>
 
-            {/* Master password del backup */}
-            <div>
-              <label
-                htmlFor="restore-password"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
-              >
-                {t('backup.ripristina_password')}
-              </label>
-              <input
-                id="restore-password"
-                type="password"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setError(null) }}
-                disabled={isLoading}
-                autoComplete="current-password"
-                className="block w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
-              />
-            </div>
+            {/* Credenziale del backup: master password o chiave di recupero */}
+            <CredenzialeRipristinoCampi
+              idPrefix="restore"
+              modo={modo}
+              onModo={(m) => { setModo(m); setError(null) }}
+              password={password}
+              onPassword={(v) => { setPassword(v); setError(null) }}
+              chiave={chiave}
+              onChiave={(v) => { setChiave(v); setError(null) }}
+              disabled={isLoading}
+            />
 
             {/* Errore */}
             {error !== null && (

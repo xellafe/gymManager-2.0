@@ -41,10 +41,16 @@ vi.mock('electron', () => {
   const { mkdirSync: fsMkdir } = require('fs')
   const testDataDir = pathJoin(osTmpdir(), `gymmanager-backup-test-${process.pid}`)
   fsMkdir(testDataDir, { recursive: true })
+  const xor = (b: Buffer): Buffer => Buffer.from(b.map((x) => x ^ 0x5a))
   return {
     app: {
       getPath: (_name: string) => testDataDir,
       getVersion: () => '0.1.0-test'
+    },
+    safeStorage: {
+      isEncryptionAvailable: () => true,
+      encryptString: (s: string) => xor(Buffer.from(s, 'utf-8')),
+      decryptString: (b: Buffer) => xor(b).toString('utf-8')
     }
   }
 })
@@ -71,16 +77,28 @@ import {
   connectDrive,
   isDriveConnected,
   backupSuDrive,
-  listBackupDrive
+  listBackupDrive,
+  leggiSlotBackupDrive
 } from '../../src/main/backup/drive-service'
 import {
   openDatabase,
   closeDatabase,
   isDatabaseOpen,
   getDatabase,
+  getCurrentKey,
+  deriveKey,
   DB_PATH
 } from '../../src/main/db/database'
 import { runMigrations } from '../../src/main/db/migrations'
+import {
+  generaChiaveRecupero,
+  impostaPin,
+  statoSblocco,
+  getSlotRecupero,
+  getSbloccoPath,
+  isRecuperoInCorso,
+  eliminaStatoSblocco
+} from '../../src/main/sicurezza/sblocco-service'
 import type { BackupManifest } from '../../src/main/backup/backup-service'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -163,11 +181,13 @@ function chiudiDbModulo(): void {
 beforeEach(() => {
   chiudiDbModulo()
   cleanupFiles(DB_PATH)
+  eliminaStatoSblocco()
 })
 
 afterEach(() => {
   chiudiDbModulo()
   cleanupFiles(DB_PATH)
+  eliminaStatoSblocco()
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -362,7 +382,7 @@ describe('ripristinaBackup', () => {
     cleanupFiles(DB_PATH)
 
     // Ripristina — il backup è cifrato con 'testpassword', il restore deve riuscire
-    await ripristinaBackup(backupPath, 'testpassword')
+    await ripristinaBackup(backupPath, { password: 'testpassword' })
     expect(isDatabaseOpen()).toBe(true)
 
     cleanupFiles(backupPath)
@@ -378,7 +398,7 @@ describe('ripristinaBackup', () => {
 
     cleanupFiles(DB_PATH)
 
-    await ripristinaBackup(backupPath, 'testpassword')
+    await ripristinaBackup(backupPath, { password: 'testpassword' })
     expect(isDatabaseOpen()).toBe(true)
 
     const db = getDatabase()
@@ -396,7 +416,7 @@ describe('ripristinaBackup', () => {
     // Nessun manifest → verificaBackup lancia Error con "manifest"
 
     try {
-      await expect(ripristinaBackup(invalidPath, 'testpassword')).rejects.toThrow()
+      await expect(ripristinaBackup(invalidPath, { password: 'testpassword' })).rejects.toThrow()
     } finally {
       cleanupFiles(invalidPath)
     }
@@ -493,7 +513,7 @@ describe('round-trip integrazione: backup → restore → DB apribile', () => {
     cleanupFiles(DB_PATH)
 
     // 4. Ripristina il backup
-    await ripristinaBackup(backupPath, 'testpassword')
+    await ripristinaBackup(backupPath, { password: 'testpassword' })
 
     // 5. Il DB deve essere aperto
     expect(isDatabaseOpen()).toBe(true)
@@ -622,5 +642,240 @@ describe('listBackupLocali', () => {
   it('ritorna [] se la cartella non esiste', async () => {
     const lista = await listBackupLocali(join(TEST_USER_DATA, 'inesistente-xyz'))
     expect(lista).toEqual([])
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suite 11: chiave di recupero nei backup (AC9, AC10, AC11)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Crea il DB cifrato con la chiave di recupero (e il PIN) e ne fa un backup. */
+async function backupConChiave(): Promise<{ backupPath: string; chiave: string }> {
+  openDatabase('testpassword')
+  const chiave = generaChiaveRecupero('testpassword')
+  impostaPin('testpassword', 'Gym24a')
+  chiudiDbModulo()
+  const backupPath = tempPath('.db')
+  await backupLocale(backupPath)
+  return { backupPath, chiave }
+}
+
+describe('backup con chiave di recupero', () => {
+  it('il manifest contiene lo slot `recupero` se la chiave esiste', async () => {
+    const { backupPath } = await backupConChiave()
+    try {
+      const manifest = JSON.parse(
+        readFileSync(backupPath + '.manifest.json', 'utf-8')
+      ) as BackupManifest
+      expect(manifest.recupero).toEqual(getSlotRecupero())
+      expect(manifest.recupero?.versione).toBe(1)
+    } finally {
+      cleanupFiles(backupPath)
+    }
+  })
+
+  it('senza chiave il manifest non ha il campo `recupero`', async () => {
+    creaDbDiTest(DB_PATH)
+    const backupPath = tempPath('.db')
+    try {
+      const manifest = await backupLocale(backupPath)
+      expect(manifest.recupero).toBeUndefined()
+    } finally {
+      cleanupFiles(backupPath)
+    }
+  })
+
+  it('ripristino con la chiave: DB aperto, recupero in corso, PIN disattivato, slot del backup', async () => {
+    const { backupPath, chiave } = await backupConChiave()
+    const slotBackup = getSlotRecupero()
+    try {
+      cleanupFiles(DB_PATH)
+      // Slot corrente diverso da quello del backup
+      openDatabase('altra-password')
+      generaChiaveRecupero('altra-password')
+      expect(getSlotRecupero()).not.toEqual(slotBackup)
+
+      await ripristinaBackup(backupPath, { chiaveRecupero: chiave.toLowerCase() })
+      expect(isDatabaseOpen()).toBe(true)
+      expect(getCurrentKey()).toBe(deriveKey('testpassword'))
+      expect(isRecuperoInCorso()).toBe(true)
+      expect(statoSblocco().pinAttivo).toBe(false)
+      expect(getSlotRecupero()).toEqual(slotBackup)
+    } finally {
+      cleanupFiles(backupPath)
+    }
+  })
+
+  it('backup senza slot → RECUPERO_NON_DISPONIBILE', async () => {
+    openDatabase('testpassword')
+    chiudiDbModulo()
+    const backupPath = tempPath('.db')
+    await backupLocale(backupPath)
+    try {
+      await expect(
+        ripristinaBackup(backupPath, { chiaveRecupero: '0000-0000-0000-0000-0000-0000' })
+      ).rejects.toThrow('RECUPERO_NON_DISPONIBILE')
+    } finally {
+      cleanupFiles(backupPath)
+    }
+  })
+
+  it('CHIAVE_ERRATA lascia intatto il DB corrente', async () => {
+    const { backupPath } = await backupConChiave()
+    try {
+      cleanupFiles(DB_PATH)
+      openDatabase('corrente-password')
+      getDatabase()
+        .prepare(`INSERT INTO clienti (nome, cognome, codice_fiscale) VALUES ('Anna', 'Bianchi', ?)`)
+        .run(uniqueCF())
+      const statoPrima = readFileSync(getSbloccoPath(), 'utf-8')
+
+      await expect(
+        ripristinaBackup(backupPath, { chiaveRecupero: '0000-0000-0000-0000-0000-0000' })
+      ).rejects.toThrow('CHIAVE_ERRATA')
+
+      expect(isDatabaseOpen()).toBe(true)
+      expect(getCurrentKey()).toBe(deriveKey('corrente-password'))
+      const n = getDatabase()
+        .prepare(`SELECT COUNT(*) AS n FROM clienti WHERE cognome = 'Bianchi'`)
+        .get() as { n: number }
+      expect(n.n).toBe(1)
+      expect(readFileSync(getSbloccoPath(), 'utf-8')).toBe(statoPrima)
+      expect(isRecuperoInCorso()).toBe(false)
+    } finally {
+      cleanupFiles(backupPath)
+    }
+  })
+
+  it('ripristino con password di un backup senza slot: PIN disattivato e nessuna chiave corrente', async () => {
+    openDatabase('testpassword')
+    chiudiDbModulo()
+    const backupPath = tempPath('.db')
+    await backupLocale(backupPath)
+    try {
+      openDatabase('testpassword')
+      generaChiaveRecupero('testpassword')
+      impostaPin('testpassword', 'Gym24a')
+      chiudiDbModulo()
+
+      await ripristinaBackup(backupPath, { password: 'testpassword' })
+      expect(isDatabaseOpen()).toBe(true)
+      expect(isRecuperoInCorso()).toBe(false)
+      expect(statoSblocco()).toMatchObject({ recuperoAttivo: false, pinAttivo: false })
+    } finally {
+      cleanupFiles(backupPath)
+    }
+  })
+
+  it('ripristino con password di un backup con slot: lo slot del backup diventa corrente', async () => {
+    const { backupPath } = await backupConChiave()
+    const slotBackup = getSlotRecupero()
+    try {
+      eliminaStatoSblocco()
+      await ripristinaBackup(backupPath, { password: 'testpassword' })
+      expect(getSlotRecupero()).toEqual(slotBackup)
+      expect(statoSblocco().pinAttivo).toBe(false)
+      expect(isRecuperoInCorso()).toBe(false)
+    } finally {
+      cleanupFiles(backupPath)
+    }
+  })
+
+  it('resetDatabase elimina sblocco.json', async () => {
+    openDatabase('testpassword')
+    generaChiaveRecupero('testpassword')
+    chiudiDbModulo()
+    expect(existsSync(getSbloccoPath())).toBe(true)
+
+    await resetDatabase('nuovapassword')
+    expect(existsSync(getSbloccoPath())).toBe(false)
+    expect(statoSblocco().recuperoAttivo).toBe(false)
+  })
+})
+
+describe('Drive — slot di recupero nei metadati', () => {
+  const tokensPath = join(TEST_USER_DATA, 'drive-tokens.json')
+
+  beforeEach(() => {
+    writeFileSync(
+      tokensPath,
+      JSON.stringify({
+        access_token: 'tok',
+        refresh_token: 'ref',
+        expiry_date: Date.now() + 3_600_000,
+        client_id: 'id',
+        client_secret: 'secret'
+      })
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    if (existsSync(tokensPath)) unlinkSync(tokensPath)
+  })
+
+  /** fetch mockato: cartella esistente, upload che registra il corpo multipart. */
+  function stubFetch(descrizione?: string): { corpi: string[] } {
+    const corpi: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: { body?: unknown }) => {
+        if (url.includes('/upload/drive/v3/files')) {
+          corpi.push(Buffer.from(init?.body as Buffer).toString('latin1'))
+          return new Response(JSON.stringify({ id: 'file-1', name: 'x' }), { status: 200 })
+        }
+        if (url.includes('fields=description')) {
+          const meta = descrizione === undefined ? {} : { description: descrizione }
+          return new Response(JSON.stringify(meta), { status: 200 })
+        }
+        return new Response(JSON.stringify({ files: [{ id: 'folder-1' }] }), { status: 200 })
+      })
+    )
+    return { corpi }
+  }
+
+  /** Estrae i metadati JSON (prima parte) dal corpo multipart. */
+  function metadati(corpo: string): { name: string; description?: string } {
+    const parte = corpo.split('\r\n\r\n')[1].split('\r\n')[0]
+    return JSON.parse(parte) as { name: string; description?: string }
+  }
+
+  it('backupSuDrive mette lo slot del manifest nel campo description', async () => {
+    const { backupPath } = await backupConChiave()
+    const { corpi } = stubFetch()
+    try {
+      await backupSuDrive(backupPath)
+      expect(corpi).toHaveLength(1)
+      const meta = metadati(corpi[0])
+      expect(meta.name).toMatch(/^gymmanager_backup_/)
+      expect(JSON.parse(meta.description as string)).toEqual(getSlotRecupero())
+    } finally {
+      cleanupFiles(backupPath)
+    }
+  })
+
+  it('backupSuDrive senza slot nel manifest non invia description', async () => {
+    creaDbDiTest(DB_PATH)
+    const backupPath = tempPath('.db')
+    await backupLocale(backupPath)
+    const { corpi } = stubFetch()
+    try {
+      await backupSuDrive(backupPath)
+      expect(metadati(corpi[0]).description).toBeUndefined()
+    } finally {
+      cleanupFiles(backupPath)
+    }
+  })
+
+  it('leggiSlotBackupDrive legge lo slot dalla description (null se assente o non valida)', async () => {
+    openDatabase('testpassword')
+    generaChiaveRecupero('testpassword')
+    const slot = getSlotRecupero()
+    stubFetch(JSON.stringify(slot))
+    expect(await leggiSlotBackupDrive('file-1')).toEqual(slot)
+    stubFetch()
+    expect(await leggiSlotBackupDrive('file-1')).toBeNull()
+    stubFetch('testo libero')
+    expect(await leggiSlotBackupDrive('file-1')).toBeNull()
   })
 })

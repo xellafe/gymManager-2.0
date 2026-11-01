@@ -123,3 +123,25 @@ describe('applyAppSettingsToDb — cartelle ricevute', () => {
     }
   })
 })
+
+describe('pin_visibile', () => {
+  it('vale false senza file o senza la chiave e true se salvata', () => {
+    expect(loadSettings().pin_visibile).toBe(false)
+    writeFileSync(getSettingsPath(), JSON.stringify({ backup_dir: 'D:/GymBackup' }), 'utf-8')
+    expect(loadSettings().pin_visibile).toBe(false)
+    writeFileSync(getSettingsPath(), JSON.stringify({ pin_visibile: true }), 'utf-8')
+    expect(loadSettings().pin_visibile).toBe(true)
+  })
+
+  it('non viene scritta in app_settings', () => {
+    const db = new Database(':memory:')
+    try {
+      runMigrations(db)
+      applyAppSettingsToDb(db, { pin_visibile: true, ragione_sociale: 'ASD Test' })
+      const righe = db.prepare(`SELECT key FROM app_settings WHERE key = 'pin_visibile'`).all()
+      expect(righe).toHaveLength(0)
+    } finally {
+      db.close()
+    }
+  })
+})

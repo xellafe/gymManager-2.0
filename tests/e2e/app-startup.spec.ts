@@ -44,7 +44,16 @@ test.describe('Setup e sblocco app', () => {
     // Passo 5: conferma
     await window.locator('[data-testid="setup-submit"]').click()
 
-    // Passo 6: l'app si sblocca e mostra la dashboard
+    // Passo 6: compare la chiave di recupero: la chiusura è disabilitata finché non si conferma
+    await expect(window.locator('[data-testid="chiave-recupero-modal"]')).toBeVisible()
+    await expect(window.locator('[data-testid="chiave-recupero-chiudi"]')).toBeDisabled()
+    await window.locator('[data-testid="chiave-recupero-conferma"]').check()
+    await window.locator('[data-testid="chiave-recupero-chiudi"]').click()
+
+    // Passo 7: passo PIN facoltativo, si salta
+    await window.locator('[data-testid="pin-salta"]').click()
+
+    // Passo 8: l'app si sblocca e mostra la dashboard
     await expect(window.locator('[data-testid="dashboard"]')).toBeVisible({ timeout: 10000 })
   })
 
