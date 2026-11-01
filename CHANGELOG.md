@@ -2,6 +2,17 @@
 
 Tutte le modifiche rilevanti di GymManager 2.0. Formato ispirato a [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versionamento [SemVer](https://semver.org/lang/it/) (pre-1.0).
 
+## [0.1.12] — 2026-11-01
+
+### Aggiunto
+- **Cartella di salvataggio ricevute** (Impostazioni → sezione ricevute): si può scegliere la cartella su cui si apre «Salva con nome» a ogni salvataggio di una ricevuta, sia da «Scarica» sia dal visualizzatore PDF. Si può comunque cambiare nome o cartella al momento; il salvataggio successivo riparte dalla cartella configurata. Senza cartella configurata, o se non è più disponibile (es. disco esterno scollegato), il dialog si apre sull'**ultima cartella usata** (ricordata anche dopo il riavvio) o sulla cartella Download.
+
+### Modificato
+- **«Visualizza» ricevuta**: il PDF si apre in una finestra dell'app con il visualizzatore integrato, invece che fuori dall'app.
+
+### Corretto
+- **Ricevute con tutore su due pagine**: con tutore, logo e fino a 5 voci la ricevuta sforava su una seconda pagina e separava la copia cliente dalla copia matrice. Il layout è più compatto e le due copie stanno sulla stessa A4; se una ricevuta è comunque troppo lunga, la copia matrice passa intera alla pagina successiva.
+
 ## [0.1.11] — 2026-07-22
 
 ### Aggiunto
